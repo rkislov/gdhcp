@@ -1,0 +1,12 @@
+/bin/
+/data/
+/godhcp
+*.db
+*.db-wal
+*.db-shm
+web/node_modules/
+web/dist/
+.DS_Store
+coverage.out
+*.test
+.env
