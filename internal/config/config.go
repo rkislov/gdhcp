@@ -25,38 +25,38 @@ import (
 
 // Config is the on-disk YAML document.
 type Config struct {
-	Path     string         `yaml:"-" json:"-"`
-	Server   Server         `yaml:"server" json:"server"`
-	Database Database       `yaml:"database" json:"database"`
-	API      API            `yaml:"api" json:"api"`
-	Web      Web            `yaml:"web" json:"web"`
-	VLANs    []VLAN         `yaml:"vlans,omitempty" json:"vlans,omitempty"`
-	Subnets  []Subnet       `yaml:"subnets,omitempty" json:"subnets,omitempty"`
-	Reservations []Reservation `yaml:"reservations,omitempty" json:"reservations,omitempty"`
-	Relay    Relay          `yaml:"relay" json:"relay"`
-	Options  map[int]string `yaml:"options,omitempty" json:"options,omitempty"`
-	Classes  []Class        `yaml:"classes,omitempty" json:"classes,omitempty"`
-	Logging  Logging        `yaml:"logging" json:"logging"`
-	Metrics  Metrics        `yaml:"metrics" json:"metrics"`
-	DHCPv6   DHCPv6         `yaml:"dhcpv6" json:"dhcpv6"`
-	DDNS     DDNS           `yaml:"ddns" json:"ddns"`
-	HA       HA             `yaml:"ha" json:"ha"`
+	Path         string         `yaml:"-" json:"-"`
+	Server       Server         `yaml:"server" json:"server"`
+	Database     Database       `yaml:"database" json:"database"`
+	API          API            `yaml:"api" json:"api"`
+	Web          Web            `yaml:"web" json:"web"`
+	VLANs        []VLAN         `yaml:"vlans,omitempty" json:"vlans,omitempty"`
+	Subnets      []Subnet       `yaml:"subnets,omitempty" json:"subnets,omitempty"`
+	Reservations []Reservation  `yaml:"reservations,omitempty" json:"reservations,omitempty"`
+	Relay        Relay          `yaml:"relay" json:"relay"`
+	Options      map[int]string `yaml:"options,omitempty" json:"options,omitempty"`
+	Classes      []Class        `yaml:"classes,omitempty" json:"classes,omitempty"`
+	Logging      Logging        `yaml:"logging" json:"logging"`
+	Metrics      Metrics        `yaml:"metrics" json:"metrics"`
+	DHCPv6       DHCPv6         `yaml:"dhcpv6" json:"dhcpv6"`
+	DDNS         DDNS           `yaml:"ddns" json:"ddns"`
+	HA           HA             `yaml:"ha" json:"ha"`
 }
 
 type Server struct {
-	Interfaces   []Interface   `yaml:"interfaces,omitempty" json:"interfaces,omitempty"`
-	Authoritative bool         `yaml:"authoritative" json:"authoritative"`
-	PingCheck    bool          `yaml:"ping_check" json:"ping_check"`
-	PingTimeout  time.Duration `yaml:"ping_timeout,omitempty" json:"ping_timeout,omitempty"`
-	LeaseDefault time.Duration `yaml:"lease_default" json:"lease_default"`
-	LeaseMax     time.Duration `yaml:"lease_max" json:"lease_max"`
-	OfferTTL     time.Duration `yaml:"offer_ttl,omitempty" json:"offer_ttl,omitempty"`
-	DeclineHold  time.Duration `yaml:"decline_hold,omitempty" json:"decline_hold,omitempty"`
-	Listen       string        `yaml:"listen,omitempty" json:"listen,omitempty"`
-	ServerID     string        `yaml:"server_id,omitempty" json:"server_id,omitempty"`
-	Hostname     string        `yaml:"hostname,omitempty" json:"hostname,omitempty"`
-	ManageLinks  bool          `yaml:"manage_links" json:"manage_links"`
-	RawVLAN      bool          `yaml:"raw_vlan" json:"raw_vlan"`
+	Interfaces    []Interface   `yaml:"interfaces,omitempty" json:"interfaces,omitempty"`
+	Authoritative bool          `yaml:"authoritative" json:"authoritative"`
+	PingCheck     bool          `yaml:"ping_check" json:"ping_check"`
+	PingTimeout   time.Duration `yaml:"ping_timeout,omitempty" json:"ping_timeout,omitempty"`
+	LeaseDefault  time.Duration `yaml:"lease_default" json:"lease_default"`
+	LeaseMax      time.Duration `yaml:"lease_max" json:"lease_max"`
+	OfferTTL      time.Duration `yaml:"offer_ttl,omitempty" json:"offer_ttl,omitempty"`
+	DeclineHold   time.Duration `yaml:"decline_hold,omitempty" json:"decline_hold,omitempty"`
+	Listen        string        `yaml:"listen,omitempty" json:"listen,omitempty"`
+	ServerID      string        `yaml:"server_id,omitempty" json:"server_id,omitempty"`
+	Hostname      string        `yaml:"hostname,omitempty" json:"hostname,omitempty"`
+	ManageLinks   bool          `yaml:"manage_links" json:"manage_links"`
+	RawVLAN       bool          `yaml:"raw_vlan" json:"raw_vlan"`
 }
 
 type Interface struct {
@@ -72,11 +72,11 @@ type Database struct {
 }
 
 type API struct {
-	Listen    string        `yaml:"listen" json:"listen"`
-	TLS       TLS           `yaml:"tls" json:"tls"`
-	Auth      Auth          `yaml:"auth" json:"auth"`
-	RateLimit float64       `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`
-	CORS      bool          `yaml:"cors" json:"cors"`
+	Listen    string  `yaml:"listen" json:"listen"`
+	TLS       TLS     `yaml:"tls" json:"tls"`
+	Auth      Auth    `yaml:"auth" json:"auth"`
+	RateLimit float64 `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`
+	CORS      bool    `yaml:"cors" json:"cors"`
 }
 
 type TLS struct {
@@ -181,11 +181,11 @@ type TrustedRelay struct {
 }
 
 type Class struct {
-	Name          string `yaml:"name" json:"name"`
-	VendorClass   string `yaml:"vendor_class,omitempty" json:"vendor_class,omitempty"`
-	OUI           string `yaml:"oui,omitempty" json:"oui,omitempty"`
-	VLAN          *int   `yaml:"vlan,omitempty" json:"vlan,omitempty"`
-	Subnet        string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
+	Name        string `yaml:"name" json:"name"`
+	VendorClass string `yaml:"vendor_class,omitempty" json:"vendor_class,omitempty"`
+	OUI         string `yaml:"oui,omitempty" json:"oui,omitempty"`
+	VLAN        *int   `yaml:"vlan,omitempty" json:"vlan,omitempty"`
+	Subnet      string `yaml:"subnet,omitempty" json:"subnet,omitempty"`
 }
 
 type Logging struct {
@@ -215,12 +215,12 @@ type DDNS struct {
 }
 
 type HA struct {
-	Enabled  bool   `yaml:"enabled" json:"enabled"`
-	Role     string `yaml:"role,omitempty" json:"role,omitempty"`
-	Peer     string `yaml:"peer,omitempty" json:"peer,omitempty"`
-	Secret   string `yaml:"secret,omitempty" json:"secret,omitempty"`
-	MCLT     time.Duration `yaml:"mclt,omitempty" json:"mclt,omitempty"`
-	Split    int    `yaml:"split,omitempty" json:"split,omitempty"`
+	Enabled bool          `yaml:"enabled" json:"enabled"`
+	Role    string        `yaml:"role,omitempty" json:"role,omitempty"`
+	Peer    string        `yaml:"peer,omitempty" json:"peer,omitempty"`
+	Secret  string        `yaml:"secret,omitempty" json:"secret,omitempty"`
+	MCLT    time.Duration `yaml:"mclt,omitempty" json:"mclt,omitempty"`
+	Split   int           `yaml:"split,omitempty" json:"split,omitempty"`
 }
 
 func (c *Config) EchoOption82() bool {

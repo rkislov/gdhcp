@@ -29,7 +29,10 @@ const (
 	EtherIPv4  uint16 = 0x0800
 )
 
-var ErrShort = errors.New("vlan: frame too short")
+var (
+	ErrShort       = errors.New("vlan: frame too short")
+	ErrUnsupported = errors.New("vlan: netlink management is supported on linux only")
+)
 
 // Frame is an Ethernet header with an optional 802.1Q or QinQ tag.
 type Frame struct {

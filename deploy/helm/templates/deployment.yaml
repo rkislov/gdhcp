@@ -1,0 +1,52 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: godhcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: godhcp
+  template:
+    metadata:
+      labels:
+        app: godhcp
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      containers:
+        - name: godhcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "{{ .Values.configPath }}"]
+          ports:
+            - name: api
+              containerPort: {{ .Values.service.apiPort }}
+            - name: metrics
+              containerPort: {{ .Values.service.metricsPort }}
+          securityContext:
+            capabilities:
+              add:
+{{ toYaml .Values.securityContext.capabilities.add | indent 16 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/godhcp
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/godhcp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: api
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+      volumes:
+        - name: config
+          configMap:
+            name: godhcp
+        - name: data
+          emptyDir: {}

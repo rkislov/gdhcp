@@ -1,0 +1,56 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+# Гостевой Wi-Fi за relay: VLAN из Circuit ID, короткий lease.
+
+server:
+  authoritative: true
+  ping_check: false
+  lease_default: 1h
+  lease_max: 4h
+  listen: ":67"
+  server_id: 192.168.30.2
+
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/guest.db
+
+api:
+  listen: ":8080"
+  auth:
+    jwt_secret: "${JWT_SECRET}"
+
+web:
+  enabled: true
+
+vlans:
+  - id: 30
+    name: guest
+    source: relay
+    subnet_ref: guest
+
+subnets:
+  - id: guest
+    network: 192.168.30.0/24
+    range: [192.168.30.10, 192.168.30.200]
+    gateway: 192.168.30.1
+    dns: [1.1.1.1, 8.8.8.8]
+    vlan: 30
+
+relay:
+  enabled: true
+  require_option_82: true
+  echo_option_82: true
+  max_relay_hops: 4
+  unknown_vlan_action: ignore
+  trusted_relays:
+    - giaddr: 10.0.0.1
+      remote_id: relay-guest
+      vendor: cisco
+
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  listen: ":9090"

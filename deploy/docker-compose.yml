@@ -1,0 +1,20 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+
+services:
+  godhcp:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: godhcp:1.0
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ../configs/example.yml:/etc/godhcp/config.yml:ro
+      - godhcp-data:/var/lib/godhcp
+    restart: unless-stopped
+
+volumes:
+  godhcp-data:

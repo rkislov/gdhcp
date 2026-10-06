@@ -15,9 +15,11 @@
 package metrics
 
 import (
+	"net/http"
 	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // PoolStat is one subnet utilization sample.
@@ -35,15 +37,15 @@ type Source interface {
 
 // Metrics is the Prometheus instrumentation for the DHCP server.
 type Metrics struct {
-	Registry *prometheus.Registry
-	Requests *prometheus.CounterVec
-	Duration prometheus.Histogram
-	Relay    *prometheus.CounterVec
-	Unknown  *prometheus.CounterVec
-	Parser   *prometheus.CounterVec
-	Hops     prometheus.Counter
+	Registry  *prometheus.Registry
+	Requests  *prometheus.CounterVec
+	Duration  prometheus.Histogram
+	Relay     *prometheus.CounterVec
+	Unknown   *prometheus.CounterVec
+	Parser    *prometheus.CounterVec
+	Hops      prometheus.Counter
 	Untrusted prometheus.Counter
-	src      atomic.Value
+	src       atomic.Value
 }
 
 // New registers collectors on a private registry.
@@ -84,6 +86,11 @@ func New() *Metrics {
 	reg.MustRegister(m.Requests, m.Duration, m.Relay, m.Unknown, m.Parser, m.Hops, m.Untrusted)
 	reg.MustRegister(&poolCollector{m: m})
 	return m
+}
+
+// Handler serves this registry in Prometheus text format.
+func (m *Metrics) Handler() http.Handler {
+	return promhttp.HandlerFor(m.Registry, promhttp.HandlerOpts{})
 }
 
 // SetSource attaches the live pool stats provider.

@@ -16,11 +16,6 @@
 
 package vlan
 
-import "errors"
-
-// ErrUnsupported is returned where netlink VLAN management is unavailable.
-var ErrUnsupported = errors.New("vlan: netlink management is supported on linux only")
-
 // Ensure reports that dynamic VLAN interfaces are unavailable on this OS.
 func Ensure(parent string, vlanID int) (string, error) {
 	return "", ErrUnsupported

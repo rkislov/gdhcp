@@ -1,0 +1,55 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+
+image:
+  repository: godhcp
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+configPath: /etc/godhcp/config.yml
+
+service:
+  apiPort: 8080
+  metricsPort: 9090
+
+hostNetwork: true
+
+config: |
+  # Copyright 2026 Кислов Роман Сергеевич
+  # Licensed under the Apache License, Version 2.0.
+  server:
+    authoritative: true
+    lease_default: 24h
+    lease_max: 72h
+    listen: ":67"
+  database:
+    driver: sqlite
+    dsn: /var/lib/godhcp/leases.db
+  api:
+    listen: ":8080"
+    auth:
+      jwt_secret: "${JWT_SECRET:-replace-this-secret-32bytes-min}"
+  web:
+    enabled: true
+  subnets:
+    - id: lan
+      network: 192.168.10.0/24
+      range: [192.168.10.100, 192.168.10.200]
+      gateway: 192.168.10.1
+      vlan: 10
+  vlans:
+    - id: 10
+      name: lan
+      subnet_ref: lan
+  logging:
+    level: info
+    format: json
+  metrics:
+    enabled: true
+    listen: ":9090"
+
+securityContext:
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW

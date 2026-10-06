@@ -1,0 +1,50 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+
+image:
+  repository: godhcp
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+hostNetwork: true
+
+jwtSecret: change-me-change-me-change-me
+
+config: |
+  server:
+    authoritative: true
+    ping_check: false
+    lease_default: 24h
+    lease_max: 72h
+    listen: ":67"
+    server_id: 192.168.10.1
+  database:
+    driver: sqlite
+    dsn: /var/lib/godhcp/leases.db
+  api:
+    listen: ":8080"
+    auth:
+      jwt_secret: "${JWT_SECRET}"
+      users:
+        - username: admin
+          password_hash: "$argon2id$v=19$m=65536,t=3,p=4$l5pNqgpjYF/Rd9cVtkJJ9Q$tohwQHjkzqr1oNJ/mDD/UFW+2XQvKMFLQGl98Ah0Pkg"
+          role: admin
+  web:
+    enabled: true
+    path: /ui
+  subnets:
+    - id: lan
+      network: 192.168.10.0/24
+      range: [192.168.10.100, 192.168.10.200]
+      gateway: 192.168.10.1
+      vlan: 10
+  vlans:
+    - id: 10
+      name: lan
+      subnet_ref: lan
+  logging:
+    level: info
+    format: json
+  metrics:
+    enabled: true
+    listen: ":9090"

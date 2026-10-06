@@ -47,33 +47,33 @@ const (
 )
 
 const (
-	OptPad              byte = 0
-	OptSubnetMask       byte = 1
-	OptRouter           byte = 3
-	OptDNS              byte = 6
-	OptHostname         byte = 12
-	OptDomainName       byte = 15
-	OptNTP              byte = 42
-	OptVendorSpecific   byte = 43
-	OptRequestedIP      byte = 50
-	OptLeaseTime        byte = 51
-	OptMessageType      byte = 53
-	OptServerID         byte = 54
-	OptParamRequest     byte = 55
-	OptMessage          byte = 56
-	OptMaxMessageSize   byte = 57
-	OptRenewalTime      byte = 58
-	OptRebindingTime    byte = 59
-	OptVendorClass      byte = 60
-	OptClientID         byte = 61
-	OptTFTPServer       byte = 66
-	OptBootfileName     byte = 67
-	OptRelayAgent       byte = 82
-	OptDomainSearch     byte = 119
-	OptClasslessRoute   byte = 121
-	OptTFTPServerAddr   byte = 150
-	OptWPAD             byte = 252
-	OptEnd              byte = 255
+	OptPad            byte = 0
+	OptSubnetMask     byte = 1
+	OptRouter         byte = 3
+	OptDNS            byte = 6
+	OptHostname       byte = 12
+	OptDomainName     byte = 15
+	OptNTP            byte = 42
+	OptVendorSpecific byte = 43
+	OptRequestedIP    byte = 50
+	OptLeaseTime      byte = 51
+	OptMessageType    byte = 53
+	OptServerID       byte = 54
+	OptParamRequest   byte = 55
+	OptMessage        byte = 56
+	OptMaxMessageSize byte = 57
+	OptRenewalTime    byte = 58
+	OptRebindingTime  byte = 59
+	OptVendorClass    byte = 60
+	OptClientID       byte = 61
+	OptTFTPServer     byte = 66
+	OptBootfileName   byte = 67
+	OptRelayAgent     byte = 82
+	OptDomainSearch   byte = 119
+	OptClasslessRoute byte = 121
+	OptTFTPServerAddr byte = 150
+	OptWPAD           byte = 252
+	OptEnd            byte = 255
 )
 
 // Option is a single DHCP option. Data is owned by the packet.
@@ -84,20 +84,20 @@ type Option struct {
 
 // Packet is a DHCPv4 message (RFC 2131).
 type Packet struct {
-	Op     byte
-	HType  byte
-	HLen   byte
-	Hops   byte
-	XID    uint32
-	Secs   uint16
-	Flags  uint16
-	CIAddr netip.Addr
-	YIAddr netip.Addr
-	SIAddr netip.Addr
-	GIAddr netip.Addr
-	CHAddr net.HardwareAddr
-	SName  string
-	File   string
+	Op      byte
+	HType   byte
+	HLen    byte
+	Hops    byte
+	XID     uint32
+	Secs    uint16
+	Flags   uint16
+	CIAddr  netip.Addr
+	YIAddr  netip.Addr
+	SIAddr  netip.Addr
+	GIAddr  netip.Addr
+	CHAddr  net.HardwareAddr
+	SName   string
+	File    string
 	Options []Option
 }
 
@@ -247,6 +247,11 @@ func (p *Packet) Set(code byte, data []byte) {
 
 func (p *Packet) Add(code byte, data []byte) {
 	p.Options = append(p.Options, Option{Code: code, Data: append([]byte(nil), data...)})
+}
+
+// Append adds a prepared option.
+func (p *Packet) Append(o Option) {
+	p.Add(o.Code, o.Data)
 }
 
 // RelayAgentBlobs returns option 82 payloads in wire order, copied.

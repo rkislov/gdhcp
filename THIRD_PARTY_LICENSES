@@ -1,0 +1,34 @@
+GoDHCP
+Copyright 2026 Кислов Роман Сергеевич
+
+This product bundles third-party software under licenses compatible with
+Apache License 2.0. GPL and AGPL dependencies are not used.
+
+Go modules
+----------
+
+github.com/go-chi/chi/v5                 MIT
+github.com/golang-jwt/jwt/v5            MIT
+github.com/jackc/pgx/v5                 MIT
+github.com/prometheus/client_golang     Apache-2.0
+github.com/stretchr/testify             MIT
+github.com/vishvananda/netlink          Apache-2.0
+golang.org/x/crypto                     BSD-3-Clause
+golang.org/x/net                        BSD-3-Clause
+gopkg.in/yaml.v3                        MIT AND Apache-2.0
+modernc.org/sqlite                      BSD-3-Clause
+
+Indirect modules pulled by the list above stay under MIT, BSD, Apache-2.0,
+or ISC. Run `go-licenses` or inspect go.sum if you redistribute a build.
+
+Web interface
+-------------
+
+react, react-dom, react-router-dom      MIT
+vite, @vitejs/plugin-react               MIT
+typescript                               Apache-2.0
+tailwindcss, postcss, autoprefixer       MIT
+@monaco-editor/react and monaco-editor  MIT
+
+The Swagger UI page loads swagger-ui-dist from the unpkg CDN at view time.
+That package is Apache-2.0 and is not vendored in this repository.

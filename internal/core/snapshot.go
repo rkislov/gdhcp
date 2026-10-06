@@ -25,7 +25,6 @@ import (
 	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/pool"
 	"github.com/kislovrs/godhcp/internal/relay"
-	"github.com/kislovrs/godhcp/internal/storage"
 )
 
 // Snapshot is an immutable view of the running configuration.
@@ -282,10 +281,9 @@ func buildSubnet(cfg *config.Config, raw config.Subnet, vlans map[int]config.VLA
 	return sub, spec, nil
 }
 
-func catalogOf(snap *Snapshot) storage.Catalog {
-	var cat storage.Catalog
+func catalogParts(snap *Snapshot) (vlans []model.VLAN, subnets []model.Subnet, relays []model.Relay, reservations []model.Reservation) {
 	for _, v := range snap.Cfg.VLANs {
-		cat.VLANs = append(cat.VLANs, model.VLAN{
+		vlans = append(vlans, model.VLAN{
 			ID: v.ID, Name: v.Name, Interface: v.Interface, Priority: v.Priority, Source: v.Source, SubnetID: v.SubnetRef,
 		})
 	}
@@ -310,9 +308,9 @@ func catalogOf(snap *Snapshot) storage.Catalog {
 			Options:    opts,
 			LeaseSec:   int(sub.Lease / time.Second),
 		}
-		cat.Subnets = append(cat.Subnets, row)
+		subnets = append(subnets, row)
 		for _, r := range sub.Reservations {
-			cat.Reservations = append(cat.Reservations, model.Reservation{
+			reservations = append(reservations, model.Reservation{
 				MAC: r.MAC, ClientID: r.ClientID, IP: r.IP, Hostname: r.Hostname, SubnetID: sub.ID,
 			})
 		}
@@ -321,11 +319,11 @@ func catalogOf(snap *Snapshot) storage.Catalog {
 		if t.GIAddr == "" {
 			continue
 		}
-		cat.Relays = append(cat.Relays, model.Relay{
-			GIAddr: t.GIAddr, RemoteID: t.RemoteID, Vendor: t.Vendor, Trusted: true, ParserName: t.Parser, VLANID: t.VLAN,
+		relays = append(relays, model.Relay{
+			GIAddr: t.GIAddr, RemoteID: t.RemoteID, Vendor: t.Vendor, Trusted: true, ParserName: t.Parser, VLANID: t.VLAN, SubnetID: t.SubnetID,
 		})
 	}
-	return cat
+	return vlans, subnets, relays, reservations
 }
 
 func bindingsOf(leases []model.Lease) []pool.Binding {

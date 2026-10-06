@@ -57,11 +57,11 @@ type Binding struct {
 
 // Stat is pool occupancy for metrics and the UI.
 type Stat struct {
-	ID    string
-	VLAN  int
-	Size  int
-	Used  int
-	Free  int
+	ID   string
+	VLAN int
+	Size int
+	Used int
+	Free int
 }
 
 // Manager is the in-memory address index. The database remains the source of
@@ -256,8 +256,7 @@ func (m *Manager) Release(ip, mac string) {
 	}
 }
 
-// Hold keeps ip out of the free list without assigning it to a client.
-// Declines and failed ping-checks use this.
+// Hold keeps ip out of the pool until the caller releases it. Reservations are left alone.
 func (m *Manager) Hold(ip string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -265,10 +264,15 @@ func (m *Manager) Hold(ip string) {
 	if st == nil {
 		return
 	}
-	if owner := st.used[ip]; owner != "" && st.byMAC[owner] == ip {
-		delete(st.byMAC, owner)
+	if _, reserved := st.reserved[ip]; reserved {
+		return
 	}
-	st.used[ip] = ""
+	for holder, prev := range st.byMAC {
+		if prev == ip {
+			delete(st.byMAC, holder)
+		}
+	}
+	st.used[ip] = "*held*"
 }
 
 // Bind forces occupancy, used when restoring a lease.

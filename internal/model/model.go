@@ -62,16 +62,16 @@ type VLAN struct {
 
 // Subnet is a persisted subnet row. Options is a JSON object.
 type Subnet struct {
-	ID         string         `json:"id"`
-	Network    string         `json:"network"`
-	RangeStart string         `json:"range_start,omitempty"`
-	RangeEnd   string         `json:"range_end,omitempty"`
-	Gateway    string         `json:"gateway,omitempty"`
-	VLANID     *int           `json:"vlan_id,omitempty"`
-	Domain     string         `json:"domain,omitempty"`
-	DNS        []string       `json:"dns,omitempty"`
+	ID         string            `json:"id"`
+	Network    string            `json:"network"`
+	RangeStart string            `json:"range_start,omitempty"`
+	RangeEnd   string            `json:"range_end,omitempty"`
+	Gateway    string            `json:"gateway,omitempty"`
+	VLANID     *int              `json:"vlan_id,omitempty"`
+	Domain     string            `json:"domain,omitempty"`
+	DNS        []string          `json:"dns,omitempty"`
 	Options    map[string]string `json:"options,omitempty"`
-	LeaseSec   int            `json:"lease_seconds,omitempty"`
+	LeaseSec   int               `json:"lease_seconds,omitempty"`
 }
 
 // Relay is a known or trusted relay agent.

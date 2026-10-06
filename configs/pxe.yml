@@ -1,0 +1,52 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+# PXE: next-server и bootfile-name для установки по сети.
+
+server:
+  interfaces:
+    - name: eth0
+      mode: access
+      vlan: 40
+  authoritative: true
+  ping_check: true
+  lease_default: 30m
+  lease_max: 2h
+  listen: ":67"
+  server_id: 10.40.0.1
+
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/pxe.db
+
+api:
+  listen: ":8080"
+  auth:
+    jwt_secret: "${JWT_SECRET}"
+
+web:
+  enabled: true
+
+vlans:
+  - id: 40
+    name: pxe
+    interface: eth0.40
+    priority: 5
+    subnet_ref: install
+
+subnets:
+  - id: install
+    network: 10.40.0.0/24
+    range: [10.40.0.50, 10.40.0.200]
+    gateway: 10.40.0.1
+    dns: [1.1.1.1]
+    vlan: 40
+    next_server: 10.40.0.2
+    boot_file: undionly.kpxe
+
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  listen: ":9090"

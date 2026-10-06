@@ -16,16 +16,13 @@ package core
 
 import (
 	"context"
-	"encoding/hex"
-	"errors"
 	"net"
 	"net/netip"
-	"strconv"
 	"time"
 
 	"github.com/kislovrs/godhcp/internal/classify"
-	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/dhcp"
+	"github.com/kislovrs/godhcp/internal/ha"
 	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/pool"
 	"github.com/kislovrs/godhcp/internal/relay"
@@ -38,291 +35,244 @@ type Input struct {
 	VLAN   *int
 }
 
-// Output is the reply, or a nil Packet when the datagram is dropped.
+// Output is the reply to send. A nil Output means the server stays silent.
 type Output struct {
 	Packet *dhcp.Packet
 	Dest   *net.UDPAddr
 	VLAN   *int
 	PCP    int
-	Subnet string
 }
 
 // Handle runs the DHCPv4 state machine for one packet.
 func (s *Service) Handle(ctx context.Context, in Input) (*Output, error) {
 	start := time.Now()
-	defer func() {
-		if s.metrics != nil {
-			s.metrics.Duration.Observe(time.Since(start).Seconds())
-		}
-	}()
+	defer func() { s.metrics.Duration.Observe(time.Since(start).Seconds()) }()
 	if in.Packet == nil {
-		return nil, errors.New("core: nil packet")
+		return nil, nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.snap == nil {
-		return nil, errors.New("core: not configured")
+	snap := s.current()
+	if snap == nil {
+		return nil, nil
 	}
-	return s.handleLocked(ctx, in)
+	return s.dispatch(ctx, snap, in)
 }
 
-func (s *Service) handleLocked(ctx context.Context, in Input) (*Output, error) {
+func (s *Service) dispatch(ctx context.Context, snap *Snapshot, in Input) (*Output, error) {
 	pkt := in.Packet
-	cfg := s.snap.cfg
 	mt := pkt.MessageType()
-	mac := pkt.MAC()
-
-	var infos []*relay.Info
-	for _, blob := range pkt.RelayAgentBlobs() {
-		info, err := relay.Parse(blob)
-		if err != nil {
-			s.log.Warn("option 82", "err", err)
-			continue
-		}
-		infos = append(infos, info)
+	if mt == 0 {
+		s.log.Warn("dhcp packet without message type")
+		return nil, nil
 	}
-	circuit := ""
-	remote := ""
-	var link netip.Addr
-	if len(infos) > 0 {
-		ids := relay.WalkCircuitIDs(infos)
-		circuit = firstCircuit(s.snap.parsers, ids)
-		if circuit == "" && len(ids) > 0 {
-			s.metrics.ParserErrors.WithLabelValues("circuit-id").Inc()
-		}
-		remote = stringLabel(relay.FirstRemoteID(infos))
-		link = relay.FirstLinkSelection(infos)
-	}
-
-	vlan := in.VLAN
-	if vlan == nil {
-		if v, ok := vlanFromConfig(cfg, in.Iface); ok {
-			vlan = &v
-		}
-	}
+	infos := parseRelay(pkt, s)
+	circuit := firstCircuit(infos)
+	remote := string(relay.FirstRemoteID(infos))
+	link := relay.FirstLinkSelection(infos)
+	mac := model.NormalizeMAC(pkt.MAC())
 
 	if pkt.Relayed() {
-		if !cfg.Relay.Enabled {
-			s.log.Warn("relay disabled", "giaddr", pkt.GIAddr.String(), "mac", mac)
+		if !snap.Cfg.Relay.Enabled {
+			s.log.Warn("dropped relayed packet", "reason", "relay disabled", "giaddr", pkt.GIAddr.String())
 			return nil, nil
 		}
-		if int(pkt.Hops) > cfg.Relay.MaxRelayHops {
-			s.metrics.HopsExceeded.Inc()
-			s.log.Warn("relay hops exceeded", "hops", pkt.Hops, "giaddr", pkt.GIAddr.String(), "mac", mac)
+		if int(pkt.Hops) > snap.Cfg.Relay.MaxRelayHops {
+			s.metrics.Hops.Inc()
+			s.log.Warn("dropped relayed packet", "reason", "hops exceeded", "hops", pkt.Hops, "giaddr", pkt.GIAddr.String())
 			return nil, nil
 		}
-		if !relayAllowed(cfg, pkt.GIAddr.String(), remote, len(infos) > 0) {
+		if !relayTrusted(snap, pkt, remote) {
 			s.metrics.Untrusted.Inc()
-			s.log.Warn("untrusted relay", "giaddr", pkt.GIAddr.String(), "remote_id", remote, "circuit_id", circuit, "mac", mac)
+			s.log.Warn("dropped untrusted relay", "giaddr", pkt.GIAddr.String(), "remote_id", remote, "circuit_id", circuit)
+			return nil, nil
+		}
+		if snap.Cfg.Relay.RequireOption82 && len(infos) == 0 {
+			s.log.Warn("dropped relayed packet", "reason", "option 82 required", "giaddr", pkt.GIAddr.String())
 			return nil, nil
 		}
 	}
 
-	sub, vlan, unknown := s.selectSubnet(pkt, vlan, circuit, link)
-	vlanLabel := vlanString(vlan)
+	vlanID := in.VLAN
+	if vlanID == nil && in.Iface != "" {
+		if id, ok := vlanFromIface(snap, in.Iface); ok {
+			vlanID = &id
+		}
+	}
+
+	sub, source, unknown := selectSubnet(snap, pkt, circuit, link, mac, vlanID)
 	if pkt.Relayed() {
-		s.noteRelay(pkt.GIAddr.String(), remote, circuit, vlan)
-		s.metrics.RelayRequests.WithLabelValues(pkt.GIAddr.String(), remote, vlanLabel).Inc()
+		s.metrics.Relay.WithLabelValues(pkt.GIAddr.String(), truncate(remote, 64), vlanLabel(vlanID)).Inc()
+		s.noteRelay(pkt.GIAddr.String(), circuit, remote, vlanID, unknown || sub == nil)
 	}
-	if unknown {
-		if pkt.Relayed() {
-			s.metrics.RelayUnknown.WithLabelValues(pkt.GIAddr.String()).Inc()
+	if sub == nil && unknown && snap.Cfg.Relay.UnknownVLANAction == "default-pool" {
+		sub = snap.defaultSubnet()
+		source = "default-pool"
+	}
+	if sub == nil && !pkt.Relayed() {
+		if ip := clientAddr(pkt); ip.IsValid() {
+			if by := snap.byIP(ip); by != nil {
+				sub = by
+				source = "client-ip"
+			}
 		}
-		return s.unknownVLAN(ctx, cfg, pkt, vlan)
 	}
+	if sub == nil && len(snap.Subnets) == 1 && !pkt.Relayed() && vlanID == nil {
+		for _, only := range snap.Subnets {
+			sub = only
+		}
+		source = "only"
+	}
+	labelsSubnet := "none"
+	if sub != nil {
+		labelsSubnet = sub.ID
+		if vlanID == nil {
+			vlanID = sub.VLAN
+		}
+	}
+	s.metrics.Requests.WithLabelValues(dhcp.MessageName(mt), labelsSubnet, vlanLabel(vlanID)).Inc()
+
 	if sub == nil {
-		s.metrics.Requests.WithLabelValues(dhcp.MessageName(mt), "", vlanLabel).Inc()
-		s.log.Info("no subnet", "type", dhcp.MessageName(mt), "mac", mac, "iface", in.Iface, "vlan", vlanLabel, "giaddr", addrString(pkt.GIAddr))
-		return s.unknownVLAN(ctx, cfg, pkt, vlan)
-	}
-
-	if classSubnet, ok := classify.Match(cfg.Classes, pkt.VendorClass(), mac, vlan); ok {
-		if alt := s.snap.subs[classSubnet]; alt != nil {
-			sub = alt
+		if snap.Cfg.Relay.UnknownVLANAction == "nak" && (mt == dhcp.MsgDiscover || mt == dhcp.MsgRequest) {
+			s.log.Warn("nak for unknown vlan", "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "vlan", vlanLabel(vlanID))
+			return s.nak(snap, pkt, "unknown vlan"), nil
 		}
+		s.log.Warn("no subnet for request", "mac", mac, "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "vlan", vlanLabel(vlanID), "source", source)
+		return nil, nil
 	}
-
-	s.metrics.Requests.WithLabelValues(dhcp.MessageName(mt), sub.raw.ID, vlanLabel).Inc()
-	s.log.Info("dhcp",
-		"type", dhcp.MessageName(mt),
-		"mac", mac,
-		"giaddr", addrString(pkt.GIAddr),
-		"circuit_id", circuit,
-		"remote_id", remote,
-		"vlan", vlanLabel,
-		"pool", sub.raw.ID,
-		"iface", in.Iface,
-	)
 
 	switch mt {
 	case dhcp.MsgDiscover:
-		return s.onDiscover(ctx, cfg, pkt, sub, vlan, circuit, remote, link)
+		return s.offer(ctx, snap, pkt, sub, mac, vlanID, circuit, remote, link, false)
 	case dhcp.MsgRequest:
-		return s.onRequest(ctx, cfg, pkt, sub, vlan, circuit, remote, link)
+		return s.request(ctx, snap, pkt, sub, mac, vlanID, circuit, remote, link)
 	case dhcp.MsgDecline:
-		return s.onDecline(ctx, pkt, sub, vlan)
+		return s.decline(ctx, snap, pkt, sub, mac, vlanID, circuit, remote)
 	case dhcp.MsgRelease:
-		return s.onRelease(ctx, pkt, sub)
+		return s.release(ctx, pkt, sub, mac, vlanID, circuit, remote)
 	case dhcp.MsgInform:
-		return s.onInform(cfg, pkt, sub, vlan)
+		out := s.ack(snap, pkt, sub, netip.Addr{}, 0, 0, 0, pkt.Hostname(), vlanID, false)
+		s.log.Info("dhcp inform", "mac", mac, "subnet", sub.ID, "vlan", vlanLabel(vlanID))
+		return out, nil
 	default:
-		s.log.Debug("ignore dhcp type", "type", mt)
 		return nil, nil
 	}
 }
 
-func (s *Service) selectSubnet(pkt *dhcp.Packet, vlan *int, circuit string, link netip.Addr) (*subnet, *int, bool) {
-	cfg := s.snap.cfg
-	if pkt.Relayed() {
-		prio := append([]string(nil), cfg.Relay.VLANSourcePriority...)
-		if !cfg.TrustGIAddr() {
-			filtered := make([]string, 0, len(prio))
-			for _, src := range prio {
-				if src != relay.SourceGIAddr {
-					filtered = append(filtered, src)
-				}
-			}
-			prio = filtered
-		}
-		gi := pkt.GIAddr
-		if !cfg.TrustGIAddr() {
-			gi = netip.Addr{}
-		}
-		dec, ok := relay.Resolve(prio, s.snap.parsers, s.snap.networks(), s.snap.routes, relay.Request{
-			LinkSelection: link,
-			CircuitID:     circuit,
-			GIAddr:        gi,
-			DefaultVLAN:   cfg.Relay.DefaultVLAN,
-			DefaultPool:   cfg.Relay.DefaultPool,
-		})
-		if dec.UnknownVLAN {
-			id := dec.UnknownID
-			return nil, &id, true
-		}
-		if ok {
-			return s.snap.subs[dec.SubnetID], dec.VLAN, false
-		}
-		return nil, vlan, false
-	}
-	if vlan != nil {
-		if sub := s.subnetByVLAN(*vlan); sub != nil {
-			return sub, vlan, false
-		}
-		return nil, vlan, true
-	}
-	if ip, ok := pkt.RequestedIP(); ok {
-		if id, found := s.pools.SubnetOf(ip); found {
-			return s.snap.subs[id], s.snap.subs[id].vlan, false
-		}
-	}
-	if pkt.CIAddr.IsValid() && !pkt.CIAddr.IsUnspecified() {
-		if id, found := s.pools.SubnetOf(pkt.CIAddr); found {
-			return s.snap.subs[id], s.snap.subs[id].vlan, false
-		}
-	}
-	if len(s.snap.subs) == 1 {
-		for _, sub := range s.snap.subs {
-			return sub, sub.vlan, false
-		}
-	}
-	return nil, nil, false
-}
-
-func (s *Service) subnetByVLAN(id int) *subnet {
-	for _, sub := range s.snap.subs {
-		if sub.vlan != nil && *sub.vlan == id {
-			return sub
-		}
-	}
-	return nil
-}
-
-func (s *Service) unknownVLAN(ctx context.Context, cfg *config.Config, pkt *dhcp.Packet, vlan *int) (*Output, error) {
-	action := cfg.Relay.UnknownVLANAction
-	s.log.Warn("unknown vlan", "action", action, "mac", pkt.MAC(), "giaddr", addrString(pkt.GIAddr), "vlan", vlanString(vlan))
-	switch action {
-	case "nak":
-		if pkt.MessageType() == dhcp.MsgDiscover || pkt.MessageType() == dhcp.MsgRequest || pkt.MessageType() == dhcp.MsgInform {
-			reply := buildReply(cfg, pkt, nil, dhcp.MsgNak, netip.Addr{}, 0, "unknown vlan")
-			return &Output{Packet: reply, Dest: destination(pkt, netip.Addr{}), VLAN: vlan}, nil
-		}
-	case "default-pool":
-		if cfg.Relay.DefaultPool != "" {
-			if sub := s.snap.subs[cfg.Relay.DefaultPool]; sub != nil {
-				switch pkt.MessageType() {
-				case dhcp.MsgDiscover:
-					return s.onDiscover(ctx, cfg, pkt, sub, sub.vlan, "", "", netip.Addr{})
-				case dhcp.MsgRequest:
-					return s.onRequest(ctx, cfg, pkt, sub, sub.vlan, "", "", netip.Addr{})
-				}
-			}
-		}
-	}
-	return nil, nil
-}
-
-func (s *Service) onDiscover(ctx context.Context, cfg *config.Config, pkt *dhcp.Packet, sub *subnet, vlan *int, circuit, remote string, link netip.Addr) (*Output, error) {
-	hint, _ := pkt.RequestedIP()
-	ip, err := s.offerAddress(ctx, cfg, sub, pkt.MAC(), pkt.ClientID(), hint, false)
-	if err != nil {
-		s.log.Warn("discover", "err", err, "mac", pkt.MAC(), "pool", sub.raw.ID)
+func (s *Service) offer(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string, link netip.Addr, strict bool) (*Output, error) {
+	if !s.answerNew(snap, mac, false) {
 		return nil, nil
 	}
-	leaseFor := s.leaseTime(cfg, sub, pkt)
-	if err := s.persist(ctx, pkt, sub, vlan, ip, model.StateOffered, s.now().Add(cfg.Server.OfferTTL), circuit, remote, link); err != nil {
-		s.pools.Release(ip.String(), pkt.MAC())
-		return nil, err
-	}
-	s.log.Info("offer", "mac", pkt.MAC(), "ip", ip.String(), "pool", sub.raw.ID, "vlan", vlanString(vlan), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote)
-	s.refreshMetrics()
-	reply := buildReply(cfg, pkt, sub, dhcp.MsgOffer, ip, leaseFor, "")
-	return &Output{Packet: reply, Dest: destination(pkt, ip), VLAN: vlan, PCP: sub.pcp, Subnet: sub.raw.ID}, nil
-}
-
-func (s *Service) onRequest(ctx context.Context, cfg *config.Config, pkt *dhcp.Packet, sub *subnet, vlan *int, circuit, remote string, link netip.Addr) (*Output, error) {
-	if sid, ok := pkt.ServerID(); ok && sid.String() != cfg.Server.ServerID {
-		return nil, nil
-	}
-	requested, hasReq := pkt.RequestedIP()
-	if !hasReq && pkt.CIAddr.IsValid() && !pkt.CIAddr.IsUnspecified() {
-		requested = pkt.CIAddr
-		hasReq = true
-	}
-	ip, err := s.offerAddress(ctx, cfg, sub, pkt.MAC(), pkt.ClientID(), requested, hasReq)
-	if err != nil {
-		if errors.Is(err, pool.ErrConflict) || errors.Is(err, pool.ErrNotInPool) || errors.Is(err, pool.ErrExhausted) {
-			if cfg.Server.Authoritative {
-				s.log.Info("nak", "mac", pkt.MAC(), "requested", addrString(requested), "pool", sub.raw.ID, "err", err)
-				reply := buildReply(cfg, pkt, sub, dhcp.MsgNak, netip.Addr{}, 0, "requested address is not available")
-				return &Output{Packet: reply, Dest: destination(pkt, netip.Addr{}), VLAN: vlan, PCP: sub.pcp, Subnet: sub.raw.ID}, nil
-			}
+	requested, _ := pkt.RequestedIP()
+	var leased netip.Addr
+	allocated := false
+	for attempt := 0; attempt < 4; attempt++ {
+		ip, err := s.pools.Allocate(sub.ID, mac, pkt.ClientID(), requested, strict)
+		if err != nil {
+			s.log.Warn("pool allocate failed", "subnet", sub.ID, "mac", mac, "err", err)
 			return nil, nil
 		}
-		return nil, err
+		if s.needsPing(snap, sub, mac, ip) && !s.addressFree(ctx, snap, ip) {
+			s.pools.Hold(ip.String())
+			s.persist(ctx, snap, sub, model.Lease{
+				IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID,
+				VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+				LinkSelect: addrString(link), State: model.StateDeclined,
+				ExpiresAt: s.now().Add(snap.Cfg.Server.DeclineHold),
+			})
+			requested = netip.Addr{}
+			strict = false
+			continue
+		}
+		leased = ip
+		allocated = true
+		break
 	}
-	leaseFor := s.leaseTime(cfg, sub, pkt)
-	if err := s.persist(ctx, pkt, sub, vlan, ip, model.StateBound, s.now().Add(leaseFor), circuit, remote, link); err != nil {
-		return nil, err
-	}
-	s.log.Info("ack", "mac", pkt.MAC(), "ip", ip.String(), "pool", sub.raw.ID, "vlan", vlanString(vlan), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote)
-	s.refreshMetrics()
-	reply := buildReply(cfg, pkt, sub, dhcp.MsgAck, ip, leaseFor, "")
-	return &Output{Packet: reply, Dest: destination(pkt, ip), VLAN: vlan, PCP: sub.pcp, Subnet: sub.raw.ID}, nil
-}
-
-func (s *Service) onDecline(ctx context.Context, pkt *dhcp.Packet, sub *subnet, vlan *int) (*Output, error) {
-	ip, ok := pkt.RequestedIP()
-	if !ok {
+	if !allocated {
 		return nil, nil
 	}
-	s.pools.Bind(sub.raw.ID, ip.String(), "", "")
-	until := s.now().Add(s.snap.cfg.Server.DeclineHold)
-	_ = s.persist(ctx, pkt, sub, vlan, ip, model.StateDeclined, until, "", "", netip.Addr{})
-	s.log.Info("decline", "mac", pkt.MAC(), "ip", ip.String(), "pool", sub.raw.ID)
+	hostname := hostFor(sub, mac, pkt.ClientID(), pkt.Hostname())
+	leaseFor := snap.Cfg.Server.OfferTTL
+	if leaseFor <= 0 {
+		leaseFor = time.Minute
+	}
+	s.persist(ctx, snap, sub, model.Lease{
+		IP: leased.String(), MAC: mac, ClientID: pkt.ClientID(), Hostname: hostname, SubnetID: sub.ID,
+		VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+		LinkSelect: addrString(link), State: model.StateOffered, ExpiresAt: s.now().Add(leaseFor),
+	})
+	d, t1, t2 := sub.timers(pkt, snap.Cfg.Server.LeaseMax)
+	s.log.Info("dhcp offer", "mac", mac, "ip", leased.String(), "subnet", sub.ID, "vlan", vlanLabel(vlanID), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote)
+	return s.ack(snap, pkt, sub, leased, d, t1, t2, hostname, vlanID, true), nil
+}
+
+func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string, link netip.Addr) (*Output, error) {
+	if id, ok := snap.serverID(); ok {
+		if got, has := pkt.ServerID(); has && got != id {
+			return nil, nil
+		}
+	}
+	want, hasWant := pkt.RequestedIP()
+	if !hasWant && pkt.CIAddr.IsValid() && !pkt.CIAddr.IsUnspecified() {
+		want = pkt.CIAddr
+		hasWant = true
+	}
+	have := s.owns(ctx, sub.ID, mac, want)
+	if !s.answerNew(snap, mac, have) {
+		return nil, nil
+	}
+	if !hasWant {
+		if snap.Cfg.Server.Authoritative {
+			return s.nak(snap, pkt, "address required"), nil
+		}
+		return nil, nil
+	}
+	if by := snap.byIP(want); by != nil && by.ID != sub.ID && !pkt.Relayed() {
+		sub = by
+		if vlanID == nil {
+			vlanID = sub.VLAN
+		}
+	}
+	leased, err := s.pools.Allocate(sub.ID, mac, pkt.ClientID(), want, true)
+	if err != nil {
+		if snap.Cfg.Server.Authoritative {
+			s.log.Warn("dhcp nak", "mac", mac, "ip", want.String(), "subnet", sub.ID, "err", err, "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit)
+			return s.nak(snap, pkt, "address unavailable"), nil
+		}
+		s.log.Info("ignored request", "mac", mac, "ip", want.String(), "err", err)
+		return nil, nil
+	}
+	hostname := hostFor(sub, mac, pkt.ClientID(), pkt.Hostname())
+	d, t1, t2 := sub.timers(pkt, snap.Cfg.Server.LeaseMax)
+	rec := model.Lease{
+		IP: leased.String(), MAC: mac, ClientID: pkt.ClientID(), Hostname: hostname, SubnetID: sub.ID,
+		VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+		LinkSelect: addrString(link), State: model.StateBound, ExpiresAt: s.now().Add(d),
+	}
+	s.persist(ctx, snap, sub, rec)
+	if s.onBound != nil {
+		go s.onBound(rec)
+	}
+	s.log.Info("dhcp ack", "mac", mac, "ip", leased.String(), "subnet", sub.ID, "vlan", vlanLabel(vlanID), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote, "pool", sub.ID)
+	return s.ack(snap, pkt, sub, leased, d, t1, t2, hostname, vlanID, false), nil
+}
+
+func (s *Service) decline(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string) (*Output, error) {
+	ip, ok := pkt.RequestedIP()
+	if !ok {
+		ip = pkt.CIAddr
+	}
+	if ip.IsValid() {
+		s.pools.Hold(ip.String())
+		s.persist(ctx, snap, sub, model.Lease{
+			IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID, VLANID: vlanID,
+			GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+			State: model.StateDeclined, ExpiresAt: s.now().Add(snap.Cfg.Server.DeclineHold),
+		})
+		s.log.Warn("dhcp decline", "mac", mac, "ip", ip.String(), "subnet", sub.ID)
+	}
 	return nil, nil
 }
 
-func (s *Service) onRelease(ctx context.Context, pkt *dhcp.Packet, sub *subnet) (*Output, error) {
+func (s *Service) release(ctx context.Context, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string) (*Output, error) {
 	ip := pkt.CIAddr
 	if !ip.IsValid() || ip.IsUnspecified() {
 		if req, ok := pkt.RequestedIP(); ok {
@@ -332,196 +282,403 @@ func (s *Service) onRelease(ctx context.Context, pkt *dhcp.Packet, sub *subnet) 
 	if !ip.IsValid() {
 		return nil, nil
 	}
-	existing, err := s.store.GetLease(ctx, ip.String())
-	if err == nil && existing.MAC == pkt.MAC() {
-		existing.State = model.StateReleased
-		existing.ExpiresAt = s.now()
-		_ = s.store.UpsertLease(ctx, existing)
-		s.pools.Release(ip.String(), pkt.MAC())
-		s.refreshMetrics()
-	}
-	s.log.Info("release", "mac", pkt.MAC(), "ip", ip.String(), "pool", sub.raw.ID)
+	s.pools.Release(ip.String(), mac)
+	_ = s.store.UpsertLease(ctx, model.Lease{
+		IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID, VLANID: vlanID,
+		GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+		State: model.StateReleased, ExpiresAt: s.now(),
+	})
+	s.log.Info("dhcp release", "mac", mac, "ip", ip.String(), "subnet", sub.ID)
 	return nil, nil
 }
 
-func (s *Service) onInform(cfg *config.Config, pkt *dhcp.Packet, sub *subnet, vlan *int) (*Output, error) {
-	reply := buildReply(cfg, pkt, sub, dhcp.MsgAck, netip.Addr{}, 0, "")
-	return &Output{Packet: reply, Dest: destination(pkt, pkt.CIAddr), VLAN: vlan, PCP: sub.pcp, Subnet: sub.raw.ID}, nil
-}
-
-func (s *Service) offerAddress(ctx context.Context, cfg *config.Config, sub *subnet, mac, clientID string, hint netip.Addr, strict bool) (netip.Addr, error) {
-	for attempt := 0; attempt < 4; attempt++ {
-		ip, err := s.pools.Allocate(sub.raw.ID, mac, clientID, hint, strict)
-		if err != nil {
-			return netip.Addr{}, err
-		}
-		if !cfg.Server.PingCheck || s.isReservation(sub, mac, clientID, ip) {
-			return ip, nil
-		}
-		inUse, err := s.probe.InUse(ctx, ip, cfg.Server.PingTimeout)
-		if err != nil || !inUse {
-			return ip, nil
-		}
-		s.log.Info("ping check", "ip", ip.String(), "in_use", true)
-		s.pools.Hold(ip.String())
-		_ = s.store.UpsertLease(ctx, model.Lease{
-			IP: ip.String(), MAC: mac, SubnetID: sub.raw.ID, VLANID: sub.vlan,
-			State: model.StateDeclined, ExpiresAt: s.now().Add(cfg.Server.DeclineHold), CreatedAt: s.now(),
-		})
-		if strict {
-			return netip.Addr{}, pool.ErrConflict
-		}
-		hint = netip.Addr{}
+func (s *Service) persist(ctx context.Context, snap *Snapshot, sub *Subnet, l model.Lease) {
+	if l.CreatedAt.IsZero() {
+		l.CreatedAt = s.now()
 	}
-	return netip.Addr{}, pool.ErrExhausted
+	if err := s.store.UpsertLease(ctx, l); err != nil {
+		s.log.Error("persist lease", "ip", l.IP, "err", err)
+		s.pools.Release(l.IP, l.MAC)
+	}
 }
 
-func (s *Service) isReservation(sub *subnet, mac, clientID string, ip netip.Addr) bool {
-	for _, r := range sub.raw.Reservations {
-		if r.IP == ip.String() && (normMAC(r.MAC) == mac || (clientID != "" && r.ClientID == clientID)) {
+func (s *Service) needsPing(snap *Snapshot, sub *Subnet, mac string, ip netip.Addr) bool {
+	if !snap.Cfg.Server.PingCheck || s.prober == nil {
+		return false
+	}
+	if _, ok := sub.reservation(mac, ""); ok && sub.reservationIP(mac) == ip.String() {
+		return false
+	}
+	return true
+}
+
+func (sub *Subnet) reservationIP(mac string) string {
+	r, ok := sub.reservation(mac, "")
+	if !ok {
+		return ""
+	}
+	return r.IP
+}
+
+func (s *Service) addressFree(ctx context.Context, snap *Snapshot, ip netip.Addr) bool {
+	up, err := s.prober.Reachable(ctx, ip, snap.Cfg.Server.PingTimeout)
+	if err != nil {
+		s.log.Warn("ping check skipped", "ip", ip.String(), "err", err)
+		return true
+	}
+	return !up
+}
+
+func (s *Service) owns(ctx context.Context, subnet, mac string, ip netip.Addr) bool {
+	if !ip.IsValid() {
+		list, _, err := s.store.ListLeases(ctx, model.LeaseFilter{SubnetID: subnet, Limit: 500})
+		if err != nil {
+			return false
+		}
+		for _, l := range list {
+			if l.MAC == mac && (l.State == model.StateBound || l.State == model.StateOffered) && l.ExpiresAt.After(s.now()) {
+				return true
+			}
+		}
+		return false
+	}
+	l, err := s.store.GetLease(ctx, ip.String())
+	if err != nil {
+		return false
+	}
+	return l.MAC == mac && (l.State == model.StateBound || l.State == model.StateOffered) && l.ExpiresAt.After(s.now())
+}
+
+func (s *Service) answerNew(snap *Snapshot, mac string, haveLease bool) bool {
+	if !snap.Cfg.HA.Enabled || haveLease {
+		return true
+	}
+	return ha.Answers(snap.Cfg.HA.Role, snap.Cfg.HA.Split, mac)
+}
+
+func (s *Service) nak(snap *Snapshot, pkt *dhcp.Packet, reason string) *Output {
+	reply := baseReply(pkt)
+	reply.Append(dhcp.ByteOption(dhcp.OptMessageType, dhcp.MsgNak))
+	if id, ok := snap.serverID(); ok {
+		reply.Append(dhcp.IPOption(dhcp.OptServerID, id))
+		reply.SIAddr = id
+	}
+	reply.Append(dhcp.StringOption(dhcp.OptMessage, reason))
+	if cid, ok := pkt.Get(dhcp.OptClientID); ok {
+		reply.Append(dhcp.Option{Code: dhcp.OptClientID, Data: cid})
+	}
+	echo82(snap, pkt, reply)
+	return &Output{Packet: reply, Dest: destination(pkt, netip.Addr{}), VLAN: nil}
+}
+
+func (s *Service) ack(snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, yi netip.Addr, lease, t1, t2 time.Duration, hostname string, vlanID *int, offer bool) *Output {
+	reply := baseReply(pkt)
+	mt := byte(dhcp.MsgAck)
+	if offer {
+		mt = dhcp.MsgOffer
+		reply.CIAddr = netip.Addr{}
+	}
+	if yi.IsValid() {
+		reply.YIAddr = yi
+	}
+	reply.Append(dhcp.ByteOption(dhcp.OptMessageType, mt))
+	if id, ok := snap.serverID(); ok {
+		reply.Append(dhcp.IPOption(dhcp.OptServerID, id))
+		if !sub.NextServer.IsValid() {
+			reply.SIAddr = id
+		}
+	}
+	if sub.NextServer.IsValid() {
+		reply.SIAddr = sub.NextServer
+	}
+	if sub.BootFile != "" {
+		reply.File = sub.BootFile
+	}
+	if lease > 0 && mt != dhcp.MsgInform {
+		reply.Append(dhcp.DurationOption(dhcp.OptLeaseTime, lease))
+		reply.Append(dhcp.DurationOption(dhcp.OptRenewalTime, t1))
+		reply.Append(dhcp.DurationOption(dhcp.OptRebindingTime, t2))
+	}
+	if sub.Prefix.IsValid() {
+		reply.Append(dhcp.IPOption(dhcp.OptSubnetMask, prefixMask(sub.Prefix)))
+	}
+	if sub.Gateway.IsValid() {
+		reply.Append(dhcp.IPOption(dhcp.OptRouter, sub.Gateway))
+	}
+	if len(sub.DNS) > 0 {
+		reply.Append(dhcp.IPOption(dhcp.OptDNS, sub.DNS...))
+	}
+	if sub.Domain != "" {
+		reply.Append(dhcp.StringOption(dhcp.OptDomainName, sub.Domain))
+	}
+	if hostname != "" {
+		reply.Append(dhcp.StringOption(dhcp.OptHostname, hostname))
+	}
+	for code, value := range sub.Options {
+		if replyHas(reply, byte(code)) {
+			continue
+		}
+		opt, err := dhcp.ParseConfiguredOption(code, value)
+		if err != nil {
+			s.log.Warn("skip option", "code", code, "err", err)
+			continue
+		}
+		reply.Append(opt)
+	}
+	if sub.BootFile != "" && !replyHas(reply, dhcp.OptBootfileName) {
+		reply.Append(dhcp.StringOption(dhcp.OptBootfileName, sub.BootFile))
+	}
+	if cid, ok := pkt.Get(dhcp.OptClientID); ok {
+		reply.Append(dhcp.Option{Code: dhcp.OptClientID, Data: cid})
+	}
+	echo82(snap, pkt, reply)
+	return &Output{Packet: reply, Dest: destination(pkt, yi), VLAN: vlanID, PCP: sub.PCP}
+}
+
+func (sub *Subnet) timers(pkt *dhcp.Packet, max time.Duration) (lease, t1, t2 time.Duration) {
+	lease = sub.Lease
+	if sec, ok := pkt.RequestedLease(); ok {
+		want := time.Duration(sec) * time.Second
+		if want > 0 && want < lease {
+			lease = want
+		}
+	}
+	if max > 0 && lease > max {
+		lease = max
+	}
+	if lease < time.Minute {
+		lease = time.Minute
+	}
+	t1 = lease / 2
+	t2 = lease * 7 / 8
+	if sub.T1 > 0 && sub.T1 < lease {
+		t1 = sub.T1
+	}
+	if sub.T2 > 0 && sub.T2 < lease {
+		t2 = sub.T2
+	}
+	return lease, t1, t2
+}
+
+func selectSubnet(snap *Snapshot, pkt *dhcp.Packet, circuit string, link netip.Addr, mac string, vlanID *int) (*Subnet, string, bool) {
+	if class, ok := classify.Match(snap.Cfg.Classes, mac, pkt.VendorClass(), vlanID); ok {
+		if sub := snap.Subnets[class.Subnet]; sub != nil {
+			return sub, "class:" + class.Name, false
+		}
+	}
+	if pkt.Relayed() {
+		req := relay.Request{
+			LinkSelection: link,
+			CircuitID:     circuit,
+			DefaultVLAN:   snap.Cfg.Relay.DefaultVLAN,
+			DefaultPool:   snap.Cfg.Relay.DefaultPool,
+		}
+		if snap.Cfg.TrustGIAddr() {
+			req.GIAddr = pkt.GIAddr
+		}
+		dec, ok := relay.Resolve(snap.Cfg.Relay.VLANSourcePriority, snap.Parsers, snap.Networks, snap.Routes, req)
+		if ok {
+			return snap.Subnets[dec.SubnetID], dec.Source, false
+		}
+		if dec.UnknownVLAN {
+			return nil, dec.Source, true
+		}
+		return nil, "", false
+	}
+	if vlanID != nil {
+		if sub := snap.byVLAN(*vlanID); sub != nil {
+			return sub, "vlan", false
+		}
+		return nil, "vlan", true
+	}
+	return nil, "", false
+}
+
+func relayTrusted(snap *Snapshot, pkt *dhcp.Packet, remote string) bool {
+	list := snap.Cfg.Relay.TrustedRelays
+	if len(list) == 0 {
+		return true
+	}
+	gi := pkt.GIAddr.String()
+	for _, t := range list {
+		if t.GIAddr == "" && t.RemoteID == "" {
+			continue
+		}
+		giOK := t.GIAddr == "" || t.GIAddr == gi
+		ridOK := t.RemoteID == "" || t.RemoteID == remote
+		if giOK && ridOK {
 			return true
 		}
 	}
 	return false
 }
 
-func (s *Service) persist(ctx context.Context, pkt *dhcp.Packet, sub *subnet, vlan *int, ip netip.Addr, state string, exp time.Time, circuit, remote string, link netip.Addr) error {
-	l := model.Lease{
-		IP: ip.String(), MAC: pkt.MAC(), ClientID: pkt.ClientID(), Hostname: pkt.Hostname(),
-		SubnetID: sub.raw.ID, VLANID: vlan, State: state, ExpiresAt: exp, CreatedAt: s.now(),
-		CircuitID: circuit, RemoteID: remote,
-	}
-	if pkt.Relayed() {
-		l.GIAddr = pkt.GIAddr.String()
-	}
-	if link.IsValid() {
-		l.LinkSelect = link.String()
-	}
-	if state == model.StateDeclined {
-		l.MAC = pkt.MAC()
-	}
-	return s.store.UpsertLease(ctx, l)
-}
-
-func (s *Service) leaseTime(cfg *config.Config, sub *subnet, pkt *dhcp.Packet) time.Duration {
-	d := sub.raw.Lease
-	if d <= 0 {
-		d = cfg.Server.LeaseDefault
-	}
-	if sec, ok := pkt.RequestedLease(); ok && sec > 0 {
-		want := time.Duration(sec) * time.Second
-		if want < d {
-			d = want
-		}
-	}
-	if cfg.Server.LeaseMax > 0 && d > cfg.Server.LeaseMax {
-		d = cfg.Server.LeaseMax
-	}
-	if d < time.Minute {
-		d = time.Minute
-	}
-	return d
-}
-
-func (s *Service) noteRelay(giaddr, remote, circuit string, vlan *int) {
-	s.statsMu.Lock()
-	defer s.statsMu.Unlock()
-	st := s.relayStats[giaddr]
-	if st == nil {
-		st = &model.RelayStats{GIAddr: giaddr}
-		s.relayStats[giaddr] = st
-	}
-	st.Requests++
-	st.LastSeen = s.now()
-	st.LastCircuit = circuit
-	st.LastRemoteID = remote
-	st.LastVLAN = vlan
-}
-
-func relayAllowed(cfg *config.Config, giaddr, remote string, has82 bool) bool {
-	if cfg.Relay.RequireOption82 && !has82 {
-		return false
-	}
-	if len(cfg.Relay.TrustedRelays) == 0 {
-		return true
-	}
-	for _, t := range cfg.Relay.TrustedRelays {
-		if t.GIAddr != "" && t.GIAddr != giaddr {
+func parseRelay(pkt *dhcp.Packet, s *Service) []*relay.Info {
+	var infos []*relay.Info
+	for _, blob := range pkt.RelayAgentBlobs() {
+		info, err := relay.Parse(blob)
+		if err != nil {
+			s.metrics.Parser.WithLabelValues("option82").Inc()
 			continue
 		}
-		if t.RemoteID != "" && t.RemoteID != remote {
-			continue
-		}
-		if t.GIAddr == "" && t.RemoteID == "" {
-			continue
-		}
-		return true
+		infos = append(infos, info)
 	}
-	return false
+	return infos
 }
 
-func firstCircuit(parsers []relay.Parser, ids [][]byte) string {
-	for _, id := range ids {
-		if _, _, _, ok := relay.MatchVLAN(parsers, string(id), ""); ok {
-			return string(id)
-		}
-		if _, ok := relay.BinaryVLAN(id); ok {
-			return string(id)
-		}
+func firstCircuit(infos []*relay.Info) string {
+	ids := relay.WalkCircuitIDs(infos)
+	if len(ids) == 0 {
+		return ""
 	}
-	return ""
+	return string(ids[0])
 }
 
-func vlanFromConfig(cfg *config.Config, iface string) (int, bool) {
-	if v, ok := vlanFromName(iface); ok {
-		return v, true
+func vlanFromIface(snap *Snapshot, name string) (int, bool) {
+	if id, ok := vlanName(name); ok {
+		return id, true
 	}
-	for _, inf := range cfg.Server.Interfaces {
-		if inf.Name != iface {
+	for _, iface := range snap.Cfg.Server.Interfaces {
+		if iface.Name != name {
 			continue
 		}
-		if inf.Mode == "access" && inf.VLAN > 0 {
-			return inf.VLAN, true
+		if iface.Mode == "access" && iface.VLAN >= 1 && iface.VLAN <= 4094 {
+			return iface.VLAN, true
 		}
 	}
 	return 0, false
 }
 
-func vlanFromName(name string) (int, bool) {
+func vlanName(name string) (int, bool) {
+	// delegated to the vlan package without an import cycle: local copy of the suffix rule
 	for i := len(name) - 1; i >= 0; i-- {
 		if name[i] == '.' {
-			n, err := strconv.Atoi(name[i+1:])
-			if err == nil && n >= 1 && n <= 4094 {
+			n := 0
+			if i == len(name)-1 {
+				return 0, false
+			}
+			for _, c := range name[i+1:] {
+				if c < '0' || c > '9' {
+					return 0, false
+				}
+				n = n*10 + int(c-'0')
+			}
+			if n >= 1 && n <= 4094 {
 				return n, true
 			}
-			return 0, false
 		}
 	}
 	return 0, false
 }
 
-func vlanString(v *int) string {
-	if v == nil {
-		return ""
+func clientAddr(pkt *dhcp.Packet) netip.Addr {
+	if pkt.CIAddr.IsValid() && !pkt.CIAddr.IsUnspecified() {
+		return pkt.CIAddr
 	}
-	return strconv.Itoa(*v)
+	if ip, ok := pkt.RequestedIP(); ok {
+		return ip
+	}
+	return netip.Addr{}
 }
 
-func addrString(a netip.Addr) string {
-	if !a.IsValid() || a.IsUnspecified() {
-		return ""
+func hostFor(sub *Subnet, mac, clientID, fromPkt string) string {
+	if r, ok := sub.reservation(mac, clientID); ok && r.Hostname != "" {
+		return r.Hostname
 	}
-	return a.String()
+	return fromPkt
 }
 
-func stringLabel(b []byte) string {
-	if len(b) == 0 {
-		return ""
+func baseReply(req *dhcp.Packet) *dhcp.Packet {
+	ch := make(net.HardwareAddr, 16)
+	copy(ch, req.CHAddr)
+	p := &dhcp.Packet{
+		Op:     dhcp.BootReply,
+		HType:  req.HType,
+		HLen:   req.HLen,
+		Hops:   req.Hops,
+		XID:    req.XID,
+		Secs:   req.Secs,
+		Flags:  req.Flags,
+		CIAddr: req.CIAddr,
+		GIAddr: req.GIAddr,
+		CHAddr: ch,
 	}
-	for _, c := range b {
-		if c < 0x20 || c > 0x7e {
-			return hex.EncodeToString(b)
-		}
+	if p.HType == 0 {
+		p.HType = dhcp.HTypeEthernet
 	}
-	return string(b)
+	if p.HLen == 0 {
+		p.HLen = 6
+	}
+	return p
 }
+
+func destination(req *dhcp.Packet, yi netip.Addr) *net.UDPAddr {
+	if req.Relayed() {
+		return &net.UDPAddr{IP: ipv4(req.GIAddr), Port: 67}
+	}
+	if req.CIAddr.IsValid() && !req.CIAddr.IsUnspecified() {
+		return &net.UDPAddr{IP: ipv4(req.CIAddr), Port: 68}
+	}
+	if req.Broadcast() || !yi.IsValid() {
+		return &net.UDPAddr{IP: net.IPv4bcast, Port: 68}
+	}
+	return &net.UDPAddr{IP: ipv4(yi), Port: 68}
+}
+
+func ipv4(ip netip.Addr) net.IP {
+	b := ip.As4()
+	return net.IPv4(b[0], b[1], b[2], b[3]).To4()
+}
+
+func echo82(snap *Snapshot, req, reply *dhcp.Packet) {
+	if !req.Relayed() || !snap.Cfg.EchoOption82() {
+		return
+	}
+	for _, blob := range req.RelayAgentBlobs() {
+		reply.Add(dhcp.OptRelayAgent, blob)
+	}
+}
+
+func replyHas(p *dhcp.Packet, code byte) bool {
+	_, ok := p.Get(code)
+	return ok
+}
+
+func vlanLabel(id *int) string {
+	if id == nil {
+		return "0"
+	}
+	return itoa(*id)
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [8]byte
+	i := len(b)
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
+// Compile-time check that pool errors remain referenced by callers via Allocate.
+var _ = pool.ErrExhausted
