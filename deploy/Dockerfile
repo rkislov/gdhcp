@@ -1,19 +1,11 @@
 # Copyright 2026 Кислов Роман Сергеевич
 # Licensed under the Apache License, Version 2.0.
 
-FROM node:22-bookworm AS web
-WORKDIR /src
-COPY web/package.json web/package-lock.json web/
-COPY web web
-WORKDIR /src/web
-RUN npm ci && npm run build
-
 FROM golang:1.26-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-COPY --from=web /src/internal/webui/dist internal/webui/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/godhcp ./cmd/godhcp
 
 FROM gcr.io/distroless/static-debian12

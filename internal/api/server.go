@@ -976,17 +976,7 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 	if cfg != nil && cfg.Web.Path != "" {
 		prefix = strings.TrimRight(cfg.Web.Path, "/")
 	}
-	if r.URL.Path == prefix {
-		http.Redirect(w, r, prefix+"/", http.StatusFound)
-		return
-	}
-	name := strings.TrimPrefix(r.URL.Path, prefix)
-	if name == "" {
-		name = "/"
-	}
-	r2 := r.Clone(r.Context())
-	r2.URL.Path = name
-	webui.Handler().ServeHTTP(w, r2)
+	webui.Handler(prefix).ServeHTTP(w, r)
 }
 
 func (s *Server) authenticate(next http.Handler) http.Handler {

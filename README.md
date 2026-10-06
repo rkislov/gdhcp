@@ -6,20 +6,27 @@
 
 ## Быстрый старт
 
-Нужны Go 1.26+ и Node.js 22 (сборка интерфейса).
+Нужен Go 1.26+. Веб-интерфейс — обычные Go-шаблоны и JS, уже вшиты в бинарник (`go:embed`).
 
 ```bash
-make web
-go build -o bin/godhcp ./cmd/godhcp
-./bin/godhcp hash-password -password 'changeme'
-./bin/godhcp -config configs/dev.yml
+make build
+sudo ./bin/godhcp -config configs/dev.yml
 ```
 
 - API: <http://127.0.0.1:8080>
 - Интерфейс: <http://127.0.0.1:8080/ui/>
 - Swagger: <http://127.0.0.1:8080/swagger>
 - Метрики: <http://127.0.0.1:9090>
-- В `configs/dev.yml` пользователь `admin`, пароль `changeme`. DHCP слушает UDP `:6767`, чтобы процесс можно было запустить без root.
+- В `configs/dev.yml` пользователь `admin`, пароль `changeme`.
+
+### Предупреждение: порт DHCP 67
+
+По умолчанию сервер слушает **стандартный UDP-порт DHCP `:67`** (`server.listen`). Это привилегированный порт.
+
+- На Linux процесс нужно запускать от **root** либо выдать capability: `CAP_NET_BIND_SERVICE`, `CAP_NET_RAW`, `CAP_NET_ADMIN` (для сырых сокетов, ping-check и netlink VLAN).
+- В Docker: `--network host --cap-add=NET_ADMIN --cap-add=NET_RAW` (образ уже идёт от root).
+- Без нужных прав bind на `:67` завершится ошибкой; в журнале будет предупреждение о привилегированном порте.
+- Менять `server.listen` на нестандартный порт (например `:6767`) имеет смысл только на стенде без root — реальные клиенты DHCP ожидают порт **67**.
 
 Проверка конфигурации: `./bin/godhcp -validate -config configs/example.yml`.
 
@@ -47,7 +54,7 @@ docker run -d --name godhcp \
 - Relay: опция 82 (sub-option 1, 2, 5, 151, 152), эхо без изменений, link-selection, доверенные relay, лимит hops, парсеры Circuit ID (Cisco, Huawei, MikroTik, Juniper, Aruba, HP, Extreme, Brocade, UniFi и свои regex).
 - SQLite по умолчанию и PostgreSQL. Выдача адреса транзакционная.
 - REST API, JWT и API-ключи, роли `admin` / `operator` / `viewer`.
-- Веб-интерфейс: обзор, аренды, подсети, резервации, VLAN, relay, редактор YAML, журнал (SSE), пользователи.
+- Веб-интерфейс на Go `html/template` + JS: обзор, аренды, подсети, резервации, VLAN, relay, редактор YAML, журнал (SSE), пользователи.
 - Метрики Prometheus, JSON-логи (`log/slog`), `/healthz` и `/readyz`.
 
 DHCPv6, обновления DDNS и отказоустойчивость по RFC 8156 в эту поставку не входят: в конфигурации есть заготовки, рабочий протокол — DHCPv4. Балансировка `ha` делит новых клиентов по хэшу RFC 3074 и не совместима с ISC failover по проводу.

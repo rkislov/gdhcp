@@ -1,0 +1,29 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "subnets.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="subnets">
+{{template "nav" .}}
+<main>
+  <h1>Подсети</h1>
+  <form id="create" class="card row">
+    <input name="id" placeholder="id" required>
+    <input name="network" placeholder="192.168.1.0/24" required>
+    <input name="range" placeholder="start,end">
+    <input name="gateway" placeholder="gateway">
+    <button class="primary" type="submit">Добавить</button>
+  </form>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Сеть</th><th>Диапазон</th><th>VLAN</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

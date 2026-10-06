@@ -1,0 +1,28 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "leases.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="leases">
+{{template "nav" .}}
+<main>
+  <h1>Аренды</h1>
+  <form id="filter" class="row">
+    <input name="q" placeholder="MAC / IP / hostname">
+    <input name="vlan" placeholder="VLAN">
+    <button class="primary" type="submit">Найти</button>
+    <button type="button" id="csv">CSV</button>
+  </form>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>IP</th><th>MAC</th><th>VLAN</th><th>Подсеть</th><th>giaddr</th><th>Состояние</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

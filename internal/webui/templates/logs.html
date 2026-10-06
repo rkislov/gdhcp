@@ -1,0 +1,17 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "logs.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="logs">
+{{template "nav" .}}
+<main>
+  <h1>Журнал</h1>
+  <pre id="log" class="card log"></pre>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

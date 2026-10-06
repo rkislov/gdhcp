@@ -1,0 +1,23 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "config.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="config">
+{{template "nav" .}}
+<main>
+  <h1>Конфигурация</h1>
+  <textarea id="yaml" spellcheck="false"></textarea>
+  <div class="row">
+    <button type="button" id="check">Проверить</button>
+    <button type="button" class="primary" id="save">Применить</button>
+    <button type="button" id="reload">Перечитать файл</button>
+  </div>
+  <p id="msg"></p>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

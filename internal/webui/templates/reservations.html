@@ -1,0 +1,29 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "reservations.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="reservations">
+{{template "nav" .}}
+<main>
+  <h1>Резервы</h1>
+  <form id="create" class="card row">
+    <input name="mac" placeholder="MAC">
+    <input name="ip" placeholder="IP" required>
+    <input name="subnet_id" placeholder="subnet id" required>
+    <input name="hostname" placeholder="hostname">
+    <button class="primary" type="submit">Добавить</button>
+  </form>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>MAC</th><th>IP</th><th>Подсеть</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

@@ -10,7 +10,7 @@ server:
   ping_check: false
   lease_default: 24h
   lease_max: 72h
-  listen: ":6767"
+  listen: ":67"
   server_id: 192.168.10.1
 
 database:

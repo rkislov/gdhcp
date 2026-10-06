@@ -1,0 +1,21 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "dashboard.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="dashboard">
+{{template "nav" .}}
+<main>
+  <h1>Обзор</h1>
+  <div id="status" class="grid"></div>
+  <section class="card">
+    <h2>Утилизация VLAN</h2>
+    <div id="vlans"></div>
+  </section>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

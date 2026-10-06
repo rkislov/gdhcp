@@ -16,6 +16,24 @@ godhcp \- DHCPv4 server
 .B godhcp
 is a DHCPv4 server with YAML configuration, a REST API and an embedded web interface.
 It answers clients on local VLAN interfaces and behind DHCP relays (option 82).
+By default the DHCP socket binds to UDP port
+.B 67
+.RI ( server.listen ).
+.SH WARNINGS
+UDP port 67 is privileged. On Linux run as root or grant
+.BR CAP_NET_BIND_SERVICE ,
+.B CAP_NET_RAW
+and
+.BR CAP_NET_ADMIN .
+In Docker use
+.B --network host
+together with
+.B --cap-add=NET_ADMIN
+and
+.BR --cap-add=NET_RAW .
+Changing
+.I server.listen
+to a high port is for local debugging only; production clients expect port 67.
 .SH OPTIONS
 .TP
 .BR \-config \ path

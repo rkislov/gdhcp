@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -147,6 +149,14 @@ func main() {
 	}
 
 	if cfg.Server.Listen != "" && cfg.Server.Listen != "-" {
+		if port, ok := privilegedUDPPort(cfg.Server.Listen); ok {
+			logger.Warn("DHCP listens on a privileged UDP port; root or capabilities are required",
+				"listen", cfg.Server.Listen,
+				"port", port,
+				"uid", os.Geteuid(),
+				"hint", "Linux: CAP_NET_BIND_SERVICE, CAP_NET_RAW, CAP_NET_ADMIN (or run as root). Docker: --cap-add=NET_ADMIN --cap-add=NET_RAW --network host",
+			)
+		}
 		go func() {
 			if err := server.Serve(ctx, cfg.Server.Listen, svc, logger); err != nil {
 				logger.Error("dhcp", "err", err)
@@ -194,4 +204,21 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// privilegedUDPPort reports whether addr uses a privileged UDP port (< 1024).
+func privilegedUDPPort(addr string) (int, bool) {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		if strings.HasPrefix(addr, ":") {
+			portStr = strings.TrimPrefix(addr, ":")
+		} else {
+			return 0, false
+		}
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port >= 1024 {
+		return port, false
+	}
+	return port, true
 }

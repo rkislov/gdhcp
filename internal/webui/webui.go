@@ -16,30 +16,85 @@ package webui
 
 import (
 	"embed"
+	"html/template"
 	"io/fs"
 	"net/http"
 	"strings"
 )
 
-//go:embed dist
-var dist embed.FS
+//go:embed templates/*.html static/*
+var assets embed.FS
 
-// Handler serves the embedded interface and falls back to index.html.
-func Handler() http.Handler {
-	sub, err := fs.Sub(dist, "dist")
+var pages = template.Must(template.ParseFS(assets, "templates/*.html"))
+
+// Page is the data passed into every HTML template.
+type Page struct {
+	Title  string
+	Active string
+	Prefix string
+}
+
+// Handler serves multi-page HTML templates and static assets under Prefix.
+func Handler(prefix string) http.Handler {
+	prefix = strings.TrimRight(prefix, "/")
+	if prefix == "" {
+		prefix = "/ui"
+	}
+	static, err := fs.Sub(assets, "static")
 	if err != nil {
 		return http.NotFoundHandler()
 	}
-	files := http.FS(sub)
-	fileServer := http.FileServer(files)
+	files := http.StripPrefix(prefix+"/static/", http.FileServer(http.FS(static)))
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
+		path := strings.TrimPrefix(r.URL.Path, prefix)
 		if path == "" {
-			path = "index.html"
+			http.Redirect(w, r, prefix+"/", http.StatusFound)
+			return
 		}
-		if _, err := fs.Stat(sub, path); err != nil {
-			r.URL.Path = "/index.html"
+		if strings.HasPrefix(path, "/static/") {
+			files.ServeHTTP(w, r)
+			return
 		}
-		fileServer.ServeHTTP(w, r)
+		name, title, active := route(path)
+		if name == "" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := pages.ExecuteTemplate(w, name, Page{
+			Title:  title,
+			Active: active,
+			Prefix: prefix,
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
+}
+
+func route(path string) (name, title, active string) {
+	switch strings.Trim(path, "/") {
+	case "", "dashboard":
+		return "dashboard.html", "Обзор", "dashboard"
+	case "leases":
+		return "leases.html", "Аренды", "leases"
+	case "subnets":
+		return "subnets.html", "Подсети", "subnets"
+	case "reservations":
+		return "reservations.html", "Резервы", "reservations"
+	case "vlans":
+		return "vlans.html", "VLAN", "vlans"
+	case "relays":
+		return "relays.html", "Relay", "relays"
+	case "config":
+		return "config.html", "Конфиг", "config"
+	case "logs":
+		return "logs.html", "Журнал", "logs"
+	case "users":
+		return "users.html", "Пользователи", "users"
+	case "login":
+		return "login.html", "Вход", "login"
+	default:
+		return "", "", ""
+	}
 }

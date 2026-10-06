@@ -1,0 +1,33 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "head"}}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · GoDHCP</title>
+<link rel="stylesheet" href="{{.Prefix}}/static/style.css">
+{{end}}
+
+{{define "nav"}}
+<header>
+  <a class="brand" href="{{.Prefix}}/">GoDHCP</a>
+  <nav>
+    <a href="{{.Prefix}}/" class="{{if eq .Active "dashboard"}}active{{end}}">Обзор</a>
+    <a href="{{.Prefix}}/leases" class="{{if eq .Active "leases"}}active{{end}}">Аренды</a>
+    <a href="{{.Prefix}}/subnets" class="{{if eq .Active "subnets"}}active{{end}}">Подсети</a>
+    <a href="{{.Prefix}}/reservations" class="{{if eq .Active "reservations"}}active{{end}}">Резервы</a>
+    <a href="{{.Prefix}}/vlans" class="{{if eq .Active "vlans"}}active{{end}}">VLAN</a>
+    <a href="{{.Prefix}}/relays" class="{{if eq .Active "relays"}}active{{end}}">Relay</a>
+    <a href="{{.Prefix}}/config" class="{{if eq .Active "config"}}active{{end}}">Конфиг</a>
+    <a href="{{.Prefix}}/logs" class="{{if eq .Active "logs"}}active{{end}}">Журнал</a>
+    <a href="{{.Prefix}}/users" class="{{if eq .Active "users"}}active{{end}}">Пользователи</a>
+  </nav>
+  <span class="spacer"></span>
+  <button type="button" id="theme-btn">Тема</button>
+  <button type="button" id="logout-btn" hidden>Выход</button>
+</header>
+{{end}}
+
+{{define "foot"}}
+<script>window.GODHCP_UI_PREFIX={{printf "%q" .Prefix}};</script>
+<script src="{{.Prefix}}/static/app.js"></script>
+{{end}}

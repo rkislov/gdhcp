@@ -1,0 +1,36 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "relays.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="relays">
+{{template "nav" .}}
+<main>
+  <h1>Relay</h1>
+  <form id="create" class="card row">
+    <input name="giaddr" placeholder="giaddr" required>
+    <input name="remote_id" placeholder="remote id">
+    <button class="primary" type="submit">Доверить</button>
+  </form>
+  <section class="card">
+    <h2>Тест Circuit ID</h2>
+    <form id="test" class="row">
+      <select name="parser" id="parsers"></select>
+      <input name="circuit_id" placeholder="Gi0/1:vlan20">
+      <button type="submit">Проверить</button>
+    </form>
+    <pre id="out"></pre>
+  </section>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>giaddr</th><th>remote id</th><th>trusted</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}
