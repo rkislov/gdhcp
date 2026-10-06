@@ -1,0 +1,83 @@
+-- Copyright 2026 Кислов Роман Сергеевич
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--     http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version    INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS vlans (
+    id        INTEGER PRIMARY KEY,
+    name      TEXT,
+    interface TEXT,
+    priority  INTEGER,
+    source    TEXT,
+    subnet_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS subnets (
+    id          TEXT PRIMARY KEY,
+    network     TEXT NOT NULL,
+    range_start TEXT,
+    range_end   TEXT,
+    gateway     TEXT,
+    vlan_id     INTEGER REFERENCES vlans(id) ON DELETE SET NULL,
+    options     TEXT,
+    domain      TEXT,
+    dns         TEXT,
+    lease_seconds INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS relays (
+    giaddr      TEXT PRIMARY KEY,
+    remote_id   TEXT,
+    vendor      TEXT,
+    trusted     INTEGER NOT NULL DEFAULT 0,
+    parser_name TEXT,
+    vlan_id     INTEGER,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS leases (
+    ip          TEXT PRIMARY KEY,
+    mac         TEXT NOT NULL,
+    client_id   TEXT,
+    hostname    TEXT,
+    subnet_id   TEXT REFERENCES subnets(id),
+    vlan_id     INTEGER,
+    giaddr      TEXT REFERENCES relays(giaddr) ON DELETE SET NULL,
+    circuit_id  TEXT,
+    remote_id   TEXT,
+    link_select TEXT,
+    state       TEXT,
+    expires_at  TEXT,
+    created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_leases_mac     ON leases(mac);
+CREATE INDEX IF NOT EXISTS idx_leases_vlan    ON leases(vlan_id);
+CREATE INDEX IF NOT EXISTS idx_leases_giaddr  ON leases(giaddr);
+CREATE INDEX IF NOT EXISTS idx_leases_expires ON leases(expires_at);
+CREATE INDEX IF NOT EXISTS idx_leases_subnet  ON leases(subnet_id);
+
+CREATE TABLE IF NOT EXISTS reservations (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    mac       TEXT,
+    client_id TEXT,
+    ip        TEXT NOT NULL,
+    hostname  TEXT,
+    subnet_id TEXT REFERENCES subnets(id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_mac ON reservations(mac) WHERE mac IS NOT NULL AND mac != '';
