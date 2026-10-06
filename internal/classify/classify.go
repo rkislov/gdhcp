@@ -23,11 +23,11 @@ import (
 // Match selects a subnet from client-classification rules.
 // Every predicate that is set on a class must match. The class with the most
 // predicates wins.
-func Match(classes []config.Class, vendorClass, mac string, vlan *int) (string, bool) {
+func Match(classes []config.Class, mac, vendorClass string, vlan *int) (config.Class, bool) {
 	mac = strings.ToLower(mac)
 	vendorClass = strings.ToLower(vendorClass)
 	bestScore := 0
-	best := ""
+	var best config.Class
 	for _, c := range classes {
 		if c.Subnet == "" {
 			continue
@@ -57,8 +57,8 @@ func Match(classes []config.Class, vendorClass, mac string, vlan *int) (string, 
 		}
 		if score > bestScore {
 			bestScore = score
-			best = c.Subnet
+			best = c
 		}
 	}
-	return best, best != ""
+	return best, best.Subnet != ""
 }

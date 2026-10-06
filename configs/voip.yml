@@ -1,0 +1,54 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+# IP-телефоны: опция 66 (TFTP), опция 43 и PCP 6.
+
+server:
+  interfaces:
+    - name: eth0
+      mode: access
+      vlan: 20
+  authoritative: true
+  ping_check: false
+  lease_default: 8h
+  lease_max: 24h
+  listen: ":67"
+  server_id: 192.168.20.1
+
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/voip.db
+
+api:
+  listen: ":8080"
+  auth:
+    jwt_secret: "${JWT_SECRET}"
+
+web:
+  enabled: true
+
+vlans:
+  - id: 20
+    name: voip
+    interface: eth0.20
+    priority: 6
+    subnet_ref: phones
+    options:
+      66: tftp.voip.local
+      43: "vlan-id=20;l2-priority=6"
+
+subnets:
+  - id: phones
+    network: 192.168.20.0/24
+    range: [192.168.20.10, 192.168.20.200]
+    gateway: 192.168.20.1
+    dns: [1.1.1.1]
+    domain: voip.local
+    vlan: 20
+
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  listen: ":9090"

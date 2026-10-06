@@ -1,0 +1,65 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+# Несколько абонентских VLAN за одним relay (Cisco / Huawei / MikroTik).
+
+server:
+  authoritative: true
+  ping_check: false
+  lease_default: 24h
+  lease_max: 72h
+  listen: ":67"
+  server_id: 10.255.0.2
+
+database:
+  driver: postgres
+  dsn: "postgres://godhcp:godhcp@127.0.0.1:5432/godhcp?sslmode=disable"
+
+api:
+  listen: ":8080"
+  auth:
+    jwt_secret: "${JWT_SECRET}"
+
+web:
+  enabled: true
+
+vlans:
+  - id: 100
+    name: subscribers-a
+    source: relay
+    subnet_ref: subs-a
+  - id: 200
+    name: subscribers-b
+    source: relay
+    subnet_ref: subs-b
+
+subnets:
+  - id: subs-a
+    network: 100.64.0.0/24
+    range: [100.64.0.10, 100.64.0.250]
+    gateway: 100.64.0.1
+    dns: [1.1.1.1]
+    vlan: 100
+  - id: subs-b
+    network: 100.64.1.0/24
+    range: [100.64.1.10, 100.64.1.250]
+    gateway: 100.64.1.1
+    dns: [1.1.1.1]
+    vlan: 200
+
+relay:
+  enabled: true
+  echo_option_82: true
+  max_relay_hops: 4
+  unknown_vlan_action: nak
+  trusted_relays:
+    - giaddr: 10.255.0.1
+      remote_id: bng-01
+      vendor: cisco
+
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  listen: ":9090"

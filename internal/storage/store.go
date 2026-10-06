@@ -34,6 +34,14 @@ import (
 // ErrNotFound is returned when a row does not exist.
 var ErrNotFound = errors.New("not found")
 
+// Catalog is the configured VLAN, subnet, relay and reservation set.
+type Catalog struct {
+	VLANs        []model.VLAN
+	Subnets      []model.Subnet
+	Relays       []model.Relay
+	Reservations []model.Reservation
+}
+
 // Store is the lease and catalog persistence port.
 type Store interface {
 	Close() error
@@ -44,7 +52,7 @@ type Store interface {
 	DeleteLease(ctx context.Context, ip string) error
 	ActiveLeases(ctx context.Context, now time.Time) ([]model.Lease, error)
 	ExpireLeases(ctx context.Context, now time.Time) (int, error)
-	ReplaceCatalog(ctx context.Context, vlans []model.VLAN, subnets []model.Subnet, relays []model.Relay, reservations []model.Reservation) error
+	ReplaceCatalog(ctx context.Context, cat Catalog) error
 	ListVLANs(ctx context.Context) ([]model.VLAN, error)
 	ListSubnets(ctx context.Context) ([]model.Subnet, error)
 	ListRelays(ctx context.Context) ([]model.Relay, error)
@@ -348,7 +356,8 @@ func (s *SQLStore) ExpireLeases(ctx context.Context, now time.Time) (int, error)
 	return int(n), nil
 }
 
-func (s *SQLStore) ReplaceCatalog(ctx context.Context, vlans []model.VLAN, subnets []model.Subnet, relays []model.Relay, reservations []model.Reservation) error {
+func (s *SQLStore) ReplaceCatalog(ctx context.Context, cat Catalog) error {
+	vlans, subnets, relays, reservations := cat.VLANs, cat.Subnets, cat.Relays, cat.Reservations
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

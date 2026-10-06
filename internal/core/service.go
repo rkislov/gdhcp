@@ -16,6 +16,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/netip"
 	"strconv"
@@ -36,18 +37,18 @@ type Prober interface {
 
 // Service is the DHCP core: config snapshot, pools and lease persistence.
 type Service struct {
-	mu       sync.RWMutex
-	snap     *Snapshot
-	store    storage.Store
-	pools    *pool.Manager
-	log      *slog.Logger
-	metrics  *metrics.Metrics
-	prober   Prober
-	now      func() time.Time
-	statsMu  sync.Mutex
-	stats    map[string]*model.RelayStats
-	onBound  func(model.Lease)
-	gen      int64
+	mu      sync.RWMutex
+	snap    *Snapshot
+	store   storage.Store
+	pools   *pool.Manager
+	log     *slog.Logger
+	metrics *metrics.Metrics
+	prober  Prober
+	now     func() time.Time
+	statsMu sync.Mutex
+	stats   map[string]*model.RelayStats
+	onBound func(model.Lease)
+	gen     int64
 }
 
 // Options configures a Service.
@@ -93,6 +94,10 @@ func New(ctx context.Context, opt Options) (*Service, error) {
 
 // Apply validates and installs a configuration without dropping the process.
 func (s *Service) Apply(ctx context.Context, cfg *config.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("core: nil config")
+	}
+	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -104,7 +109,10 @@ func (s *Service) Apply(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	if err := s.store.ReplaceCatalog(ctx, catalogOf(snap)); err != nil {
+	vlans, subnets, relays, reservations := catalogParts(snap)
+	if err := s.store.ReplaceCatalog(ctx, storage.Catalog{
+		VLANs: vlans, Subnets: subnets, Relays: relays, Reservations: reservations,
+	}); err != nil {
 		return err
 	}
 	leases, err := s.store.ActiveLeases(ctx, s.now())
@@ -171,7 +179,7 @@ func (s *Service) RelayStats(giaddr string) []model.RelayStats {
 	return out
 }
 
-func (s *Service) bumpRelay(giaddr string, unknown bool) {
+func (s *Service) noteRelay(giaddr, circuit, remote string, vlan *int, unknown bool) {
 	if giaddr == "" {
 		return
 	}
@@ -184,6 +192,9 @@ func (s *Service) bumpRelay(giaddr string, unknown bool) {
 	}
 	st.Requests++
 	st.LastSeen = s.now()
+	st.LastCircuit = circuit
+	st.LastRemoteID = remote
+	st.LastVLAN = vlan
 	if unknown {
 		st.UnknownVLAN++
 	}
@@ -191,16 +202,18 @@ func (s *Service) bumpRelay(giaddr string, unknown bool) {
 
 // ExpireOnce marks elapsed leases and returns their addresses to the pools.
 func (s *Service) ExpireOnce(ctx context.Context) error {
-	ips, err := s.store.ExpireLeases(ctx, s.now())
+	n, err := s.store.ExpireLeases(ctx, s.now())
+	if err != nil || n == 0 {
+		return err
+	}
+	leases, err := s.store.ActiveLeases(ctx, s.now())
 	if err != nil {
 		return err
 	}
-	for _, ip := range ips {
-		s.pools.Release(ip, "")
+	if snap := s.current(); snap != nil {
+		s.pools.Reconcile(snap.Pools, bindingsOf(leases))
 	}
-	if len(ips) > 0 {
-		s.log.Info("expired leases", "count", len(ips))
-	}
+	s.log.Info("expired leases", "count", n)
 	return nil
 }
 

@@ -1,0 +1,104 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+openapi: 3.1.0
+info:
+  title: GoDHCP API
+  version: 0.1.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  description: |
+    REST API сервера GoDHCP. Автор: Кислов Роман Сергеевич.
+servers:
+  - url: /
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: {type: string}
+            message: {type: string}
+paths:
+  /healthz:
+    get: {summary: Liveness, responses: {"200": {description: OK}}}
+  /readyz:
+    get: {summary: Readiness, responses: {"200": {description: Ready}, "503": {description: Not ready}}}
+  /api/v1/auth/login:
+    post:
+      summary: Login
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {username: {type: string}, password: {type: string}}}}}}
+      responses: {"200": {description: Tokens}, "401": {description: Unauthorized}}
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh token
+      responses: {"200": {description: Tokens}}
+  /api/v1/status:
+    get: {summary: Server status, security: [{bearerAuth: []}], responses: {"200": {description: Status}}}
+  /api/v1/leases:
+    get: {summary: List leases, security: [{bearerAuth: []}], responses: {"200": {description: Lease page}}}
+  /api/v1/leases/{ip}:
+    get: {summary: Get lease, security: [{bearerAuth: []}], parameters: [{name: ip, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Lease}}}
+    delete: {summary: Delete lease, security: [{bearerAuth: []}], parameters: [{name: ip, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}
+  /api/v1/leases/{ip}/reserve:
+    post: {summary: Reserve lease, security: [{bearerAuth: []}], parameters: [{name: ip, in: path, required: true, schema: {type: string}}], responses: {"201": {description: Reserved}}}
+  /api/v1/subnets:
+    get: {summary: List subnets, security: [{bearerAuth: []}], responses: {"200": {description: Subnets}}}
+    post: {summary: Create subnet, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/subnets/{id}:
+    put: {summary: Update subnet, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Updated}}}
+    delete: {summary: Delete subnet, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}
+  /api/v1/reservations:
+    get: {summary: List reservations, security: [{bearerAuth: []}], responses: {"200": {description: Reservations}}}
+    post: {summary: Create reservation, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/reservations/{id}:
+    delete: {summary: Delete reservation, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"204": {description: Deleted}}}
+  /api/v1/vlans:
+    get: {summary: List VLANs, security: [{bearerAuth: []}], responses: {"200": {description: VLANs}}}
+    post: {summary: Create VLAN, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/vlans/{id}:
+    get: {summary: Get VLAN, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"200": {description: VLAN}}}
+    put: {summary: Update VLAN, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"200": {description: Updated}}}
+    delete: {summary: Delete VLAN, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"204": {description: Deleted}}}
+  /api/v1/vlans/{id}/leases:
+    get: {summary: Leases in VLAN, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"200": {description: Leases}}}
+  /api/v1/vlans/{id}/stats:
+    get: {summary: VLAN stats, security: [{bearerAuth: []}], parameters: [{name: id, in: path, required: true, schema: {type: integer}}], responses: {"200": {description: Stats}}}
+  /api/v1/relays:
+    get: {summary: List relays, security: [{bearerAuth: []}], responses: {"200": {description: Relays}}}
+    post: {summary: Trust a relay, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/relays/{giaddr}:
+    get: {summary: Get relay, security: [{bearerAuth: []}], parameters: [{name: giaddr, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Relay}}}
+    delete: {summary: Delete relay, security: [{bearerAuth: []}], parameters: [{name: giaddr, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}
+  /api/v1/relays/{giaddr}/stats:
+    get: {summary: Relay stats, security: [{bearerAuth: []}], parameters: [{name: giaddr, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Stats}}}
+  /api/v1/parsers/circuit-id:
+    get: {summary: List circuit-id parsers, security: [{bearerAuth: []}], responses: {"200": {description: Parsers}}}
+    post: {summary: Add parser, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/parsers/circuit-id/test:
+    post: {summary: Test a circuit id, security: [{bearerAuth: []}], responses: {"200": {description: Match}}}
+  /api/v1/config:
+    get: {summary: Get configuration, security: [{bearerAuth: []}], responses: {"200": {description: Config}}}
+    put: {summary: Replace configuration, security: [{bearerAuth: []}], responses: {"200": {description: Applied}}}
+  /api/v1/config/reload:
+    post: {summary: Reload configuration file, security: [{bearerAuth: []}], responses: {"200": {description: Reloaded}}}
+  /api/v1/config/validate:
+    post: {summary: Validate YAML, security: [{bearerAuth: []}], responses: {"200": {description: Valid}}}
+  /api/v1/logs/stream:
+    get: {summary: Live log tail (SSE), security: [{bearerAuth: []}], responses: {"200": {description: Event stream}}}
+  /api/v1/users:
+    get: {summary: List users, security: [{bearerAuth: []}], responses: {"200": {description: Users}}}
+    post: {summary: Create user, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
+  /api/v1/users/{username}:
+    delete: {summary: Delete user, security: [{bearerAuth: []}], parameters: [{name: username, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}

@@ -1,0 +1,59 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+# Офис: trunk, рабочие станции и принтер по резервации.
+
+server:
+  interfaces:
+    - name: eth0
+      mode: trunk
+      vlans: [10]
+  authoritative: true
+  ping_check: true
+  lease_default: 12h
+  lease_max: 24h
+  listen: ":67"
+  server_id: 10.10.10.1
+
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/office.db
+
+api:
+  listen: ":8080"
+  auth:
+    jwt_secret: "${JWT_SECRET:-change-me-change-me-change-me}"
+    users:
+      - username: admin
+        password_hash: "$argon2id$v=19$m=65536,t=3,p=4$l5pNqgpjYF/Rd9cVtkJJ9Q$tohwQHjkzqr1oNJ/mDD/UFW+2XQvKMFLQGl98Ah0Pkg"
+        role: admin
+
+web:
+  enabled: true
+
+vlans:
+  - id: 10
+    name: office
+    interface: eth0.10
+    priority: 0
+    subnet_ref: office
+
+subnets:
+  - id: office
+    network: 10.10.10.0/24
+    range: [10.10.10.50, 10.10.10.250]
+    gateway: 10.10.10.1
+    dns: [10.10.10.1]
+    domain: office.local
+    vlan: 10
+    reservations:
+      - mac: "aa:bb:cc:dd:ee:ff"
+        ip: 10.10.10.20
+        hostname: printer-01
+
+logging:
+  level: info
+  format: json
+
+metrics:
+  enabled: true
+  listen: ":9090"

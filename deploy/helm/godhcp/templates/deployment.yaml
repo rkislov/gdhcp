@@ -1,0 +1,58 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-godhcp
+  labels:
+    app: godhcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: godhcp
+  template:
+    metadata:
+      labels:
+        app: godhcp
+    spec:
+      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: godhcp
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "/etc/godhcp/config.yml"]
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          env:
+            - name: JWT_SECRET
+              value: {{ .Values.jwtSecret | quote }}
+          ports:
+            - name: dhcp
+              containerPort: 67
+              protocol: UDP
+            - name: api
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/godhcp
+            - name: data
+              mountPath: /var/lib/godhcp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: api
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: api
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-godhcp
+        - name: data
+          emptyDir: {}

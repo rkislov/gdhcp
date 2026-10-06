@@ -1,0 +1,119 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# Licensed under the Apache License, Version 2.0.
+
+server:
+  interfaces:
+    - name: eth0
+      mode: trunk
+      vlans: [10, 20, 30]
+  authoritative: true
+  ping_check: true
+  lease_default: 24h
+  lease_max: 72h
+  listen: ":67"
+  server_id: 192.168.10.1
+
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/leases.db
+
+api:
+  listen: ":8080"
+  tls:
+    enabled: false
+    cert: /etc/godhcp/tls/cert.pem
+    key: /etc/godhcp/tls/key.pem
+  auth:
+    jwt_secret: "${JWT_SECRET:-change-me-change-me-change-me}"
+    token_ttl: 1h
+    users:
+      - username: admin
+        # password: changeme — смените через `godhcp hash-password`
+        password_hash: "$argon2id$v=19$m=65536,t=3,p=4$l5pNqgpjYF/Rd9cVtkJJ9Q$tohwQHjkzqr1oNJ/mDD/UFW+2XQvKMFLQGl98Ah0Pkg"
+        role: admin
+
+web:
+  enabled: true
+  path: /ui
+
+vlans:
+  - id: 10
+    name: office
+    interface: eth0.10
+    priority: 5
+    subnet_ref: office-lan
+  - id: 20
+    name: voip
+    interface: eth0.20
+    priority: 6
+    subnet_ref: voip-phones
+    options:
+      66: tftp.voip.local
+      43: "vlan-id=20;l2-priority=6"
+  - id: 30
+    name: guest
+    source: relay
+    match:
+      circuit_id_parser: cisco
+      link_selection: 192.168.30.1
+    subnet_ref: guest-wifi
+
+subnets:
+  - id: office-lan
+    network: 192.168.10.0/24
+    range: [192.168.10.100, 192.168.10.200]
+    gateway: 192.168.10.1
+    dns: [1.1.1.1, 8.8.8.8]
+    domain: lan.local
+    vlan: 10
+    reservations:
+      - mac: "aa:bb:cc:dd:ee:ff"
+        ip: 192.168.10.50
+        hostname: printer-01
+  - id: voip-phones
+    network: 192.168.20.0/24
+    range: [192.168.20.10, 192.168.20.200]
+    gateway: 192.168.20.1
+    dns: [1.1.1.1]
+    domain: voip.local
+    vlan: 20
+  - id: guest-wifi
+    network: 192.168.30.0/24
+    range: [192.168.30.10, 192.168.30.200]
+    gateway: 192.168.30.1
+    vlan: 30
+
+relay:
+  enabled: true
+  trust_giaddr: true
+  require_option_82: false
+  echo_option_82: true
+  max_relay_hops: 4
+  unknown_vlan_action: ignore
+  vlan_source_priority:
+    - option82_sub5_link_selection
+    - option82_sub1_circuit_id
+    - giaddr
+    - default_vlan
+  circuit_id_parsers:
+    - name: cisco
+      regex: '^(?P<port>[^:]+):vlan(?P<vlan>\d+)$'
+      vlan_group: vlan
+    - name: huawei
+      regex: '^slot=(?P<slot>\d+);subslot=(?P<sub>\d+);(?P<port>[^;]+);vlanid=(?P<vlan>\d+)$'
+      vlan_group: vlan
+    - name: mikrotik
+      regex: '^(?P<iface>[^:]+):(?P<vlan>\d+)$'
+      vlan_group: vlan
+  trusted_relays:
+    - remote_id: relay-01
+      giaddr: 10.0.0.1
+
+logging:
+  level: info
+  format: json
+  output: /var/log/godhcp.log
+
+metrics:
+  enabled: true
+  listen: ":9090"

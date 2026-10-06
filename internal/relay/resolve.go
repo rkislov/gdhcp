@@ -25,11 +25,11 @@ const (
 
 // Network is a subnet the resolver can select.
 type Network struct {
-	ID             string
-	VLAN           *int
-	Prefix         netip.Prefix
-	LinkSelection  netip.Addr
-	CircuitParser  string
+	ID            string
+	VLAN          *int
+	Prefix        netip.Prefix
+	LinkSelection netip.Addr
+	CircuitParser string
 }
 
 // Route maps a relay giaddr to a VLAN or subnet.
@@ -50,13 +50,13 @@ type Request struct {
 
 // Decision is the result of walking vlan_source_priority.
 type Decision struct {
-	SubnetID     string
-	VLAN         *int
-	Source       string
-	Parser       string
-	UnknownVLAN  bool
-	UnknownID    int
-	CircuitID    string
+	SubnetID    string
+	VLAN        *int
+	Source      string
+	Parser      string
+	UnknownVLAN bool
+	UnknownID   int
+	CircuitID   string
 }
 
 // Resolve walks priority and returns the first source that identifies a subnet.

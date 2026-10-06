@@ -1,0 +1,57 @@
+.\" Copyright 2026 Кислов Роман Сергеевич
+.\" Licensed under the Apache License, Version 2.0.
+.TH GODHCP 8 "2026" "GoDHCP 0.1" "System Administration"
+.SH NAME
+godhcp \- DHCPv4 server
+.SH SYNOPSIS
+.B godhcp
+[\fB\-config\fR \fIpath\fR]
+[\fB\-validate\fR]
+.PP
+.B godhcp version
+.PP
+.B godhcp hash-password \-password
+.I secret
+.SH DESCRIPTION
+.B godhcp
+is a DHCPv4 server with YAML configuration, a REST API and an embedded web interface.
+It answers clients on local VLAN interfaces and behind DHCP relays (option 82).
+.SH OPTIONS
+.TP
+.BR \-config \ path
+Configuration file. The default is the
+.I GODHCP_CONFIG
+environment variable or
+.IR configs/dev.yml .
+.TP
+.B \-validate
+Load and validate the configuration, then exit.
+.SH COMMANDS
+.TP
+.B version
+Print the version and copyright.
+.TP
+.B hash-password
+Print an argon2id PHC hash suitable for
+.IR api.auth.users .
+.SH SIGNALS
+.TP
+.B SIGHUP
+Reload the configuration file without dropping the process.
+.TP
+.BR SIGINT ", " SIGTERM
+Stop the HTTP API and the DHCP listener.
+.SH FILES
+.TP
+.I /etc/godhcp/config.yml
+Server configuration.
+.TP
+.I /var/lib/godhcp/leases.db
+Default SQLite lease database.
+.SH SEE ALSO
+The project documentation in
+.IR docs/ .
+.SH AUTHOR
+Кислов Роман Сергеевич, 2026.
+.SH LICENSE
+Apache License, Version 2.0.
