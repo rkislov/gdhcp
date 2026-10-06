@@ -1,0 +1,110 @@
+/* Copyright 2026 Кислов Роман Сергеевич
+   Licensed under the Apache License, Version 2.0. */
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --panel: #1a2332;
+  --text: #e7ecf3;
+  --muted: #93a1b5;
+  --line: #2c3a4f;
+  --accent: #3d8bfd;
+  --danger: #e35d6a;
+}
+
+html.light {
+  color-scheme: light;
+  --bg: #f4f7fb;
+  --panel: #fff;
+  --text: #152033;
+  --muted: #5c6b80;
+  --line: #d5deea;
+  --accent: #1d4ed8;
+  --danger: #b42318;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 15px/1.45 system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  flex-wrap: wrap;
+}
+.brand { font-weight: 700; color: var(--text); text-decoration: none; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav a, button {
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+nav a.active, button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+button.danger { color: var(--danger); border-color: var(--danger); }
+.spacer { flex: 1; }
+main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.row > * { flex: 1; min-width: 120px; }
+input, select, textarea {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+textarea {
+  min-height: 320px;
+  font-family: ui-monospace, monospace;
+  margin-bottom: 12px;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.table-wrap { overflow-x: auto; }
+.muted { color: var(--muted); }
+.error { color: var(--danger); }
+.bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 4px 0 10px; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.login { max-width: 380px; margin: 12vh auto; }
+.login label { display: block; margin: 10px 0; }
+.login input { margin-top: 4px; }
+.log {
+  min-height: 360px;
+  white-space: pre-wrap;
+  overflow: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+pre { white-space: pre-wrap; word-break: break-word; }

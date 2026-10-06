@@ -5,7 +5,7 @@
 1. UDP-сервер (`internal/server`) читает DHCPv4, передаёт пакет в `core.Service.Handle` и отправляет ответ.
 2. Ядро (`internal/core`) выбирает подсеть, выделяет адрес и собирает OFFER/ACK/NAK.
 3. Хранилище (`internal/storage`) держит аренды в SQLite или PostgreSQL. Пул в памяти — индекс поверх базы.
-4. HTTP (`internal/api`) отдаёт REST, Swagger и собранный React-интерфейс из `internal/webui`.
+4. HTTP (`internal/api`) отдаёт REST, Swagger и веб-интерфейс из `internal/webui` (Go-шаблоны + статический JS/CSS, `go:embed`).
 
 Прямой запрос приходит на интерфейс вида `eth0.10`. VLAN берётся из имени интерфейса или из вспомогательных данных пакета. Дальше ядро ищет подсеть с этим VLAN и выделяет адрес. В ответ кладётся PCP из `vlans[].priority`, чтобы отправитель мог выставить 802.1p.
 

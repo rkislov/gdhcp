@@ -1,0 +1,21 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="login">
+<main class="login">
+  <form id="login" class="card">
+    <h1>GoDHCP</h1>
+    <p class="muted">Вход в панель управления</p>
+    <label>Имя<input name="username" value="admin" autocomplete="username"></label>
+    <label>Пароль<input name="password" type="password" autocomplete="current-password"></label>
+    <button class="primary" type="submit">Войти</button>
+    <p id="err" class="error"></p>
+  </form>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

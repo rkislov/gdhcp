@@ -1,0 +1,27 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "users.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="users">
+{{template "nav" .}}
+<main>
+  <h1>Пользователи</h1>
+  <form id="create" class="card row">
+    <input name="username" placeholder="username" required>
+    <input name="password" type="password" placeholder="пароль" required>
+    <select name="role">
+      <option>admin</option>
+      <option>operator</option>
+      <option>viewer</option>
+    </select>
+    <button class="primary" type="submit">Создать</button>
+  </form>
+  <ul id="list" class="card"></ul>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}

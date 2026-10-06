@@ -1,0 +1,24 @@
+{{/* Copyright 2026 Кислов Роман Сергеевич
+Licensed under the Apache License, Version 2.0. */}}
+{{define "vlans.html"}}
+<!DOCTYPE html>
+<html lang="ru">
+<head>{{template "head" .}}</head>
+<body data-page="vlans">
+{{template "nav" .}}
+<main>
+  <h1>VLAN</h1>
+  <form id="create" class="card row">
+    <input name="id" placeholder="ID" required>
+    <input name="name" placeholder="имя">
+    <input name="subnet_ref" placeholder="subnet_ref">
+    <input name="priority" placeholder="PCP 0-7">
+    <button class="primary" type="submit">Добавить</button>
+  </form>
+  <div id="list"></div>
+  <p id="err" class="error"></p>
+</main>
+{{template "foot" .}}
+</body>
+</html>
+{{end}}
