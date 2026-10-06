@@ -33,11 +33,13 @@ import (
 	"github.com/kislovrs/godhcp/internal/auth"
 	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/core"
+	"github.com/kislovrs/godhcp/internal/dhcpdimport"
 	"github.com/kislovrs/godhcp/internal/logbuf"
 	"github.com/kislovrs/godhcp/internal/metrics"
 	"github.com/kislovrs/godhcp/internal/server"
 	"github.com/kislovrs/godhcp/internal/storage"
 	"github.com/kislovrs/godhcp/internal/version"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -59,6 +61,10 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "version" {
 		fmt.Printf("godhcp %s\nCopyright 2026 %s\n", version.Version, version.Author)
+		return
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "import-dhcpd" || os.Args[1] == "import") {
+		runImportDHCPD(os.Args[2:])
 		return
 	}
 
@@ -204,6 +210,44 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func runImportDHCPD(args []string) {
+	fs := flag.NewFlagSet("import-dhcpd", flag.ExitOnError)
+	in := fs.String("in", "", "path to ISC dhcpd.conf (includes are resolved)")
+	out := fs.String("out", "", "write GoDHCP YAML here (default: stdout)")
+	_ = fs.Parse(args)
+	if *in == "" {
+		fmt.Fprintln(os.Stderr, "usage: godhcp import-dhcpd -in /etc/dhcp/dhcpd.conf [-out config.yml]")
+		os.Exit(2)
+	}
+	cfg, doc, err := dhcpdimport.ImportFile(*in)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for _, w := range doc.Warnings {
+		fmt.Fprintln(os.Stderr, "warning:", w)
+	}
+	for _, f := range doc.Files {
+		fmt.Fprintln(os.Stderr, "read:", f)
+	}
+	raw, err := yaml.Marshal(cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	header := []byte("# Copyright 2026 Кислов Роман Сергеевич\n# Licensed under the Apache License, Version 2.0.\n# Imported from ISC dhcpd.conf by godhcp import-dhcpd\n")
+	body := append(header, raw...)
+	if *out == "" {
+		_, _ = os.Stdout.Write(body)
+		return
+	}
+	if err := os.WriteFile(*out, body, 0o640); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Fprintln(os.Stderr, "wrote", *out)
 }
 
 // privilegedUDPPort reports whether addr uses a privileged UDP port (< 1024).
