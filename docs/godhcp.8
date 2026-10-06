@@ -52,6 +52,21 @@ Print the version and copyright.
 .B hash-password
 Print an argon2id PHC hash suitable for
 .IR api.auth.users .
+.TP
+.B import-dhcpd
+Convert an ISC
+.I dhcpd.conf
+file to GoDHCP YAML.
+Nested
+.B include
+directives are resolved relative to the including file.
+.RS
+.P
+.B godhcp import-dhcpd \-in
+.I /etc/dhcp/dhcpd.conf
+.B \-out
+.I config.yml
+.RE
 .SH SIGNALS
 .TP
 .B SIGHUP

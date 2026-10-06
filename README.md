@@ -30,6 +30,12 @@ sudo ./bin/godhcp -config configs/dev.yml
 
 Проверка конфигурации: `./bin/godhcp -validate -config configs/example.yml`.
 
+Импорт из классического ISC `dhcpd.conf` (включая вложенные `include`):
+
+```bash
+./bin/godhcp import-dhcpd -in /etc/dhcp/dhcpd.conf -out /etc/godhcp/config.yml
+```
+
 Перечитать файл без остановки процесса: `SIGHUP` или `POST /api/v1/config/reload`.
 
 ## Docker
@@ -67,6 +73,7 @@ DHCPv6, обновления DDNS и отказоустойчивость по R
 - [VLAN](docs/vlans.md)
 - [Relay](docs/relay.md)
 - [Типовые проблемы](docs/troubleshooting.md)
+- [Импорт dhcpd.conf](docs/import-dhcpd.md)
 - [Лицензия и зависимости](docs/license.md)
 - man-страница: `docs/godhcp.8`
 
