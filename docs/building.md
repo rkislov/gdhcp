@@ -37,7 +37,9 @@ python3 -m venv /tmp/godhcp-pdf-env
 
 ## Linux-пакеты
 
-Для отдельных статических ELF-бинарников без пакета и архива выполните `make binaries`. PDF, Node.js и nFPM не нужны. Результат: `dist/releases/<version>/godhcp_<version>_linux_amd64` и `godhcp_<version>_linux_arm64`; контрольные суммы находятся рядом в `SHA256SUMS`. Для распространения приложите `LICENSE`, `NOTICE`, `THIRD_PARTY_LICENSES` и каталог `third_party/` из проекта. Команда `make packages` также сохраняет эти отдельные бинарники.
+Для бинарников Linux (amd64, 386, armv7, arm64) и macOS (amd64, arm64) выполните `make binaries`. PDF, Node.js и nFPM не нужны. Raspberry Pi с 32-битной ARMv7 ОС использует `linux_armv7`, с 64-битной ОС — `linux_arm64`. На macOS Intel используйте `darwin_amd64`, на Apple Silicon — `darwin_arm64`.
+
+Результат: `dist/releases/<version>/godhcp_<version>_<os>_<arch>`, архивы `.tar.gz` и `SHA256SUMS`. Каждый архив содержит бинарник `godhcp`, примеры конфигурации, README, LICENSE, NOTICE и уведомления сторонних компонентов. При распространении отдельных бинарников также приложите эти лицензионные файлы. Команда `make packages` отдельно собирает пакеты Linux amd64/arm64.
 
 Сначала подготовьте PDF. Затем из корня репозитория:
 
