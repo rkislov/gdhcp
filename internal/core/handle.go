@@ -55,11 +55,42 @@ func (s *Service) Handle(ctx context.Context, in Input) (*Output, error) {
 	}
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
+	return s.handleLocked(ctx, in)
+}
+
+func (s *Service) handleLocked(ctx context.Context, in Input) (*Output, error) {
+	if in.Packet == nil || in.Packet.Op != dhcp.BootRequest {
+		return nil, nil
+	}
+	if s.needsReconcile {
+		if err := s.restorePools(ctx); err != nil {
+			return nil, err
+		}
+	}
 	snap := s.current()
 	if snap == nil {
 		return nil, nil
 	}
-	return s.dispatch(ctx, snap, in)
+	out, err := s.dispatch(ctx, snap, in)
+	// NAK has no selected subnet, but still leaves on the client's VLAN.
+	if out != nil && out.Packet != nil && out.Packet.MessageType() == dhcp.MsgNak && !in.Packet.Relayed() {
+		id := in.VLAN
+		if id == nil {
+			if v, ok := vlanFromIface(snap, in.Iface); ok {
+				id = &v
+			}
+		}
+		if id != nil {
+			for _, v := range snap.Cfg.VLANs {
+				if v.ID == *id {
+					out.PCP = v.Priority
+					out.VLAN = id
+					break
+				}
+			}
+		}
+	}
+	return out, err
 }
 
 func (s *Service) dispatch(ctx context.Context, snap *Snapshot, in Input) (*Output, error) {
@@ -262,9 +293,7 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 	if err := s.persist(ctx, rec); err != nil {
 		return nil, err
 	}
-	if s.onBound != nil {
-		go s.onBound(rec)
-	}
+	s.notifyBound(ctx, rec)
 	s.log.Info("dhcp ack", "mac", mac, "ip", leased.String(), "subnet", sub.ID, "vlan", vlanLabel(vlanID), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote, "pool", sub.ID)
 	return s.ack(snap, pkt, sub, leased, d, t1, t2, hostname, vlanID, false), nil
 }

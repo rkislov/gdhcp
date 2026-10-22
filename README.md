@@ -56,7 +56,7 @@ docker run -d --name godhcp \
 
 - DHCPv4: DISCOVER, OFFER, REQUEST, ACK, NAK, DECLINE, RELEASE, INFORM.
 - Пулы, резервации по MAC и client-id, authoritative / non-authoritative, ping-check, PXE (`next_server`, `boot_file`).
-- VLAN: сопоставление интерфейса и идентификатора с подсетью, PCP в модели ответа (без установки в Ethernet текущим транспортом), опция 43, неизвестный VLAN (`ignore` / `nak` / `default-pool`). Создание VLAN-интерфейса через netlink — на Linux, если `server.manage_links: true`.
+- VLAN: сопоставление интерфейса и идентификатора с подсетью, PCP на Linux через SO_PRIORITY и egress-qos-map VLAN-интерфейса, опция 43, неизвестный VLAN (`ignore` / `nak` / `default-pool`). Создание VLAN-интерфейса через netlink — на Linux, если `server.manage_links: true`.
 - Relay: опция 82 (sub-option 1, 2, 5, 151, 152), эхо без изменений, link-selection, доверенные relay, лимит hops, парсеры Circuit ID (Cisco, Huawei, MikroTik, Juniper, Aruba, HP, Extreme, Brocade, UniFi и свои regex).
 - SQLite по умолчанию и PostgreSQL. Выдача адреса транзакционная.
 - REST API, JWT и API-ключи, роли `admin` / `operator` / `viewer`.
@@ -100,3 +100,5 @@ Apache License, Version 2.0. Copyright 2026 Кислов Роман Сергее
 `make test-dhcp-docker` проверяет реальную выдачу и продление адресов, VLAN 802.1Q, ISC relay с Option 82, восстановление SQLite после перезапуска сервера и пересоздания контейнера. Рабочая сеть не подключается: все интерфейсы внутри контейнера с `--network none`. Результаты и захваты пакетов: `output/dhcp-lab/`. Требования и ограничения: [инструкция администратора](docs/admin-guide.md#повторяемый-сетевой-стенд-в-docker).
 
 `make test-systemd-vm` проверяет пакетную службу в полноценных QEMU ARM64-гостях Debian 12 и Rocky Linux 9: автозапуск после перезагрузки ядра, reload, права и SQLite. Подробности: [systemd-стенд](docs/admin-guide.md#проверка-systemd-с-настоящей-перезагрузкой-linux).
+
+Результаты проверки PCP и нагрузки DHCP/relay: [docs/performance.md](docs/performance.md).

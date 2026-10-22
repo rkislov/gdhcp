@@ -1,8 +1,11 @@
 # Copyright 2026 Кислов Роман Сергеевич
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build test cover docker tidy release packages binaries test-dhcp-docker test-systemd-vm
+.PHONY: build test cover docker tidy release packages binaries test-dhcp-docker test-systemd-vm test-load-docker
 .DEFAULT_GOAL := build
+
+test-load-docker:
+	bash scripts/test-load-docker.sh
 
 test-systemd-vm:
 	bash scripts/test-systemd-vm.sh

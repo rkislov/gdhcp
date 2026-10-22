@@ -1,0 +1,48 @@
+{
+  "measured_on": "2026-10-22",
+  "case": "direct-renew-5000",
+  "duration_seconds": 10,
+  "leases": 100000,
+  "profiles": [
+    {
+      "stage": "before",
+      "sha256": "f0f3fd88adabff06ee6e7f6853eb594609db7f90da5d2fd48a4749c2ee7316b5",
+      "profile_path": "output/load-before-profile/direct-renew-5000.cpu.pprof",
+      "valid_replies": 7290,
+      "unanswered": 42710,
+      "pprof_top_cumulative": "File: godhcp\nBuild ID: b4017a29635cf371883c109e4e7897d7f9542543\nType: cpu\nTime: 2026-10-22 19:44:45 MSK\nDuration: 10s, Total samples = 7.93s (79.30%)\nShowing nodes accounting for 6.21s, 78.31% of 7.93s total\nDropped 242 nodes (cum <= 0.04s)\nShowing top 18 nodes out of 118\n      flat  flat%   sum%        cum   cum%\n         0     0%     0%      7.51s 94.70%  github.com/kislovrs/godhcp/internal/server.(*Listener).Serve\n         0     0%     0%      7.51s 94.70%  main.runDaemon.func2.1\n         0     0%     0%      7.51s 94.70%  main.runDaemon.func7\n         0     0%     0%      7.36s 92.81%  github.com/kislovrs/godhcp/internal/core.(*Service).Handle\n         0     0%     0%      7.35s 92.69%  github.com/kislovrs/godhcp/internal/core.(*Service).dispatch\n         0     0%     0%      7.35s 92.69%  github.com/kislovrs/godhcp/internal/core.(*Service).request\n         0     0%     0%      6.34s 79.95%  github.com/kislovrs/godhcp/internal/pool.(*Manager).Allocate\n         0     0%     0%      6.34s 79.95%  github.com/kislovrs/godhcp/internal/pool.(*state).claim\n     2.14s 26.99% 26.99%      6.34s 79.95%  github.com/kislovrs/godhcp/internal/pool.(*state).rebind (inline)\n     0.51s  6.43% 33.42%      3.42s 43.13%  runtime.mapIterNext\n     2.76s 34.80% 68.22%      2.91s 36.70%  internal/runtime/maps.(*Iter).Next\n         0     0% 68.22%      0.93s 11.73%  database/sql.withLock\n         0     0% 68.22%      0.87s 10.97%  github.com/kislovrs/godhcp/internal/core.(*Service).persist\n         0     0% 68.22%      0.87s 10.97%  github.com/kislovrs/godhcp/internal/storage.(*SQLStore).UpsertLease\n     0.78s  9.84% 78.06%      0.78s  9.84%  runtime.memequal\n         0     0% 78.06%      0.63s  7.94%  modernc.org/sqlite/lib.Xsqlite3_step\n         0     0% 78.06%      0.63s  7.94%  modernc.org/sqlite/lib._sqlite3Step\n     0.02s  0.25% 78.31%      0.62s  7.82%  modernc.org/sqlite/lib._sqlite3VdbeExec\n"
+    },
+    {
+      "stage": "index",
+      "sha256": "fa563c78219deff74a8ce30ef190fb236a3c02d3290ae1a7460d988c8c8d03e4",
+      "profile_path": "output/load-index-optimized-profile/direct-renew-5000.cpu.pprof",
+      "valid_replies": 20770,
+      "unanswered": 29230,
+      "pprof_top_cumulative": "File: godhcp\nBuild ID: 3788df2246d207b9cf3cc66a9e7dcc69fd49bb51\nType: cpu\nTime: 2026-10-22 19:45:59 MSK\nDuration: 10s, Total samples = 4.57s (45.70%)\nShowing nodes accounting for 2.08s, 45.51% of 4.57s total\nDropped 286 nodes (cum <= 0.02s)\nShowing top 18 nodes out of 209\n      flat  flat%   sum%        cum   cum%\n         0     0%     0%      3.73s 81.62%  github.com/kislovrs/godhcp/internal/server.(*Listener).Serve\n         0     0%     0%      3.73s 81.62%  main.runDaemon.func2.1\n         0     0%     0%      3.73s 81.62%  main.runDaemon.func7\n         0     0%     0%      2.95s 64.55%  github.com/kislovrs/godhcp/internal/core.(*Service).Handle\n         0     0%     0%      2.94s 64.33%  github.com/kislovrs/godhcp/internal/core.(*Service).dispatch\n         0     0%     0%      2.93s 64.11%  github.com/kislovrs/godhcp/internal/core.(*Service).request\n     0.01s  0.22%  0.22%      2.75s 60.18%  database/sql.withLock\n         0     0%  0.22%      2.53s 55.36%  github.com/kislovrs/godhcp/internal/core.(*Service).persist\n         0     0%  0.22%      2.53s 55.36%  github.com/kislovrs/godhcp/internal/storage.(*SQLStore).UpsertLease\n        2s 43.76% 43.98%         2s 43.76%  internal/runtime/syscall/linux.Syscall6\n         0     0% 43.98%      1.99s 43.54%  modernc.org/sqlite/lib.Xsqlite3_step\n         0     0% 43.98%      1.99s 43.54%  modernc.org/sqlite/lib._sqlite3Step\n     0.05s  1.09% 45.08%      1.96s 42.89%  modernc.org/sqlite/lib._sqlite3VdbeExec\n         0     0% 45.08%      1.96s 42.89%  syscall.RawSyscall6\n         0     0% 45.08%      1.69s 36.98%  database/sql.(*Tx).Commit\n     0.02s  0.44% 45.51%      1.67s 36.54%  syscall.Syscall6\n         0     0% 45.51%      1.66s 36.32%  database/sql.(*Tx).Commit.func1\n         0     0% 45.51%      1.66s 36.32%  modernc.org/sqlite.(*tx).Commit\n"
+    },
+    {
+      "stage": "sql",
+      "sha256": "ae0ec01a04c577a6dec8986d60d14644aa3fe1eace799ddd5adad7c3b9d47543",
+      "profile_path": "output/load-storage-optimized-profile/direct-renew-5000.cpu.pprof",
+      "valid_replies": 31149,
+      "unanswered": 18851,
+      "pprof_top_cumulative": "File: godhcp\nBuild ID: 7bf162cef9022c56c1f4f69c5799b593681859de\nType: cpu\nTime: 2026-10-22 19:48:16 MSK\nDuration: 10s, Total samples = 5.08s (50.80%)\nShowing nodes accounting for 2.36s, 46.46% of 5.08s total\nDropped 239 nodes (cum <= 0.03s)\nShowing top 18 nodes out of 213\n      flat  flat%   sum%        cum   cum%\n         0     0%     0%      3.75s 73.82%  github.com/kislovrs/godhcp/internal/server.(*Listener).Serve\n         0     0%     0%      3.75s 73.82%  main.runDaemon.func2.1\n         0     0%     0%      3.75s 73.82%  main.runDaemon.func7\n         0     0%     0%      2.78s 54.72%  github.com/kislovrs/godhcp/internal/core.(*Service).Handle\n         0     0%     0%      2.78s 54.72%  github.com/kislovrs/godhcp/internal/core.(*Service).dispatch\n         0     0%     0%      2.75s 54.13%  github.com/kislovrs/godhcp/internal/core.(*Service).request\n         0     0%     0%      2.32s 45.67%  github.com/kislovrs/godhcp/internal/core.(*Service).persist\n     0.01s   0.2%   0.2%      2.32s 45.67%  github.com/kislovrs/godhcp/internal/storage.(*SQLStore).UpsertLease\n     2.22s 43.70% 43.90%      2.22s 43.70%  internal/runtime/syscall/linux.Syscall6\n     0.01s   0.2% 44.09%      2.18s 42.91%  syscall.RawSyscall6\n         0     0% 44.09%      2.14s 42.13%  modernc.org/sqlite/lib.Xsqlite3_step\n     0.01s   0.2% 44.29%      2.13s 41.93%  modernc.org/sqlite/lib._sqlite3Step\n     0.07s  1.38% 45.67%      2.12s 41.73%  modernc.org/sqlite/lib._sqlite3VdbeExec\n         0     0% 45.67%      2.02s 39.76%  database/sql.withLock\n     0.04s  0.79% 46.46%      1.91s 37.60%  syscall.Syscall6\n         0     0% 46.46%      1.71s 33.66%  database/sql.(*Tx).Commit\n         0     0% 46.46%      1.71s 33.66%  modernc.org/sqlite.(*tx).exec\n         0     0% 46.46%      1.71s 33.66%  modernc.org/sqlite/lib.Xsqlite3_exec\n"
+    },
+    {
+      "stage": "batch",
+      "sha256": "f0c44a4d56fccfa4d3d564f20bdf61a49b24411457d00fb9f528b593dbc6f9f6",
+      "profile_path": "output/load-batch-profile/direct-renew-5000.cpu.pprof",
+      "valid_replies": 50000,
+      "unanswered": 0,
+      "pprof_top_cumulative": "File: godhcp\nBuild ID: 796c0f55c660fc71fa106eb801c3de1a97f2e9dd\nType: cpu\nTime: 2026-10-22 19:51:46 MSK\nDuration: 10s, Total samples = 6.32s (63.20%)\nShowing nodes accounting for 2.30s, 36.39% of 6.32s total\nDropped 342 nodes (cum <= 0.03s)\nShowing top 18 nodes out of 226\n      flat  flat%   sum%        cum   cum%\n         0     0%     0%      4.29s 67.88%  github.com/kislovrs/godhcp/internal/server.(*Listener).Serve\n         0     0%     0%      4.29s 67.88%  main.runDaemon.func2.1\n         0     0%     0%      4.29s 67.88%  main.runDaemon.func7\n         0     0%     0%      2.79s 44.15%  github.com/kislovrs/godhcp/internal/core.(*Service).HandleBatch\n     2.19s 34.65% 34.65%      2.19s 34.65%  internal/runtime/syscall/linux.Syscall6\n     0.01s  0.16% 34.81%      2.10s 33.23%  syscall.RawSyscall6\n         0     0% 34.81%      2.04s 32.28%  github.com/kislovrs/godhcp/internal/storage.(*SQLStore).WithLeaseTransaction\n         0     0% 34.81%      1.82s 28.80%  github.com/kislovrs/godhcp/internal/core.(*Service).dispatch\n         0     0% 34.81%      1.82s 28.80%  github.com/kislovrs/godhcp/internal/core.(*Service).handleLocked\n     0.02s  0.32% 35.13%      1.80s 28.48%  github.com/kislovrs/godhcp/internal/core.(*Service).request\n         0     0% 35.13%      1.67s 26.42%  database/sql.withLock\n     0.01s  0.16% 35.28%      1.66s 26.27%  runtime.systemstack\n         0     0% 35.28%      1.65s 26.11%  modernc.org/sqlite/lib.Xsqlite3_step\n     0.01s  0.16% 35.44%      1.64s 25.95%  modernc.org/sqlite/lib._sqlite3Step\n     0.06s  0.95% 36.39%      1.60s 25.32%  modernc.org/sqlite/lib._sqlite3VdbeExec\n         0     0% 36.39%      1.55s 24.53%  syscall.Syscall6\n         0     0% 36.39%      1.28s 20.25%  modernc.org/sqlite.(*tx).exec\n         0     0% 36.39%      1.28s 20.25%  runtime.gcBgMarkWorker\n"
+    }
+  ],
+  "microbenchmark": {
+    "platform": "darwin/arm64 Apple M4",
+    "name": "BenchmarkRenewAt100KLeases",
+    "before_ns_per_op": 474474,
+    "after_ns_per_op": 64.38,
+    "bytes_per_op": 16,
+    "allocations_per_op": 1
+  }
+}

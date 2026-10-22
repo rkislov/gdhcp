@@ -1,0 +1,230 @@
+{
+  "kernel": "Linux 4197358a2e83 7.0.14-linuxkit #1 SMP PREEMPT Sun Sep 20 16:14:09 UTC 2026 aarch64 GNU/Linux",
+  "version": "godhcp 0.1.3\nCopyright 2026 \u041a\u0438\u0441\u043b\u043e\u0432 \u0420\u043e\u043c\u0430\u043d \u0421\u0435\u0440\u0433\u0435\u0435\u0432\u0438\u0447\nLicense: Apache-2.0",
+  "cpu_limit": "4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1",
+  "memory_limit_bytes": "2147483648",
+  "duration_seconds": 10,
+  "seeded_bound_leases": 100000,
+  "sqlite_pragmas": [
+    "journal_mode=WAL",
+    "synchronous=NORMAL"
+  ],
+  "logging": "error",
+  "ping_check": false,
+  "scope": "UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak",
+  "results": [
+    {
+      "actual_send_rps": 100.09065123203219,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 10.001500546,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 3.802879,
+        "p95": 5.303417,
+        "p99": 7.117461
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "direct",
+      "reply_rps_including_drain": 99.98499679130047,
+      "send_errors": 0,
+      "sending_seconds": 9.990943087,
+      "sent": 1000,
+      "target_rps": 100,
+      "unanswered": 0,
+      "valid_replies": 1000,
+      "server_cpu_seconds": 2.68,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "97996 kB",
+        "VmRSS": "63680 kB"
+      }
+    },
+    {
+      "actual_send_rps": 5000.01608105172,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 15.008075132,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 296.662125,
+        "p95": 438.720004,
+        "p99": 777.779837
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "direct",
+      "reply_rps_including_drain": 450.0910303678509,
+      "send_errors": 0,
+      "sending_seconds": 9.999967838,
+      "sent": 50000,
+      "target_rps": 5000,
+      "unanswered": 43245,
+      "valid_replies": 6755,
+      "server_cpu_seconds": 8.34,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": false,
+      "server_memory_kib": {
+        "VmHWM": "117772 kB",
+        "VmRSS": "67596 kB"
+      }
+    },
+    {
+      "actual_send_rps": 100.09136961786125,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 10.001786629,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 3.79196,
+        "p95": 5.50042,
+        "p99": 6.880628
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "relay",
+      "reply_rps_including_drain": 99.98213690147298,
+      "send_errors": 0,
+      "sending_seconds": 9.990871379,
+      "sent": 1000,
+      "target_rps": 100,
+      "unanswered": 0,
+      "valid_replies": 1000,
+      "server_cpu_seconds": 2.71,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "99492 kB",
+        "VmRSS": "65072 kB"
+      }
+    },
+    {
+      "actual_send_rps": 9999.44681760277,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 15.004293048,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 211.893502,
+        "p95": 248.424713,
+        "p99": 265.623292
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "relay",
+      "reply_rps_including_drain": 468.465923553588,
+      "send_errors": 0,
+      "sending_seconds": 10.000553213,
+      "sent": 100000,
+      "target_rps": 10000,
+      "unanswered": 92971,
+      "valid_replies": 7029,
+      "server_cpu_seconds": 8.25,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": false,
+      "server_memory_kib": {
+        "VmHWM": "114772 kB",
+        "VmRSS": "64976 kB"
+      }
+    },
+    {
+      "actual_send_rps": 4999.681622274166,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 10.011770296,
+      "invalid_replies": 0,
+      "kind": "inform",
+      "latency_ms": {
+        "p50": 0.638793,
+        "p95": 1.197753,
+        "p99": 1.311003
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "direct",
+      "reply_rps_including_drain": 4994.121770849705,
+      "send_errors": 0,
+      "sending_seconds": 10.000636796,
+      "sent": 50000,
+      "target_rps": 5000,
+      "unanswered": 0,
+      "valid_replies": 50000,
+      "server_cpu_seconds": 2.82,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "102184 kB",
+        "VmRSS": "63944 kB"
+      }
+    },
+    {
+      "actual_send_rps": 9999.457525429461,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 10.012224754,
+      "invalid_replies": 0,
+      "kind": "inform",
+      "latency_ms": {
+        "p50": 0.625544,
+        "p95": 1.221084,
+        "p99": 1.336212
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "relay",
+      "reply_rps_including_drain": 9987.790172214107,
+      "send_errors": 0,
+      "sending_seconds": 10.000542504,
+      "sent": 100000,
+      "target_rps": 10000,
+      "unanswered": 0,
+      "valid_replies": 100000,
+      "server_cpu_seconds": 6.29,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "104936 kB",
+        "VmRSS": "68780 kB"
+      }
+    }
+  ],
+  "source_base": "dd511689053c83dff2ee7a96318f24a43c246e99",
+  "working_tree_modified": true,
+  "measured_on": "2026-10-22"
+}

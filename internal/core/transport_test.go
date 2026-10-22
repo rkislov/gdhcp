@@ -112,3 +112,16 @@ func TestExplicitVLANInterfaceMapping(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 998, vlan, "unknown VLAN must remain unknown")
 }
+
+func TestNAKUsesIngressVLANPriority(t *testing.T) {
+	svc := newTestService(t, nil)
+	p := discover("02:00:00:00:00:99", 1)
+	p.Set(dhcp.OptMessageType, []byte{dhcp.MsgRequest})
+	p.Append(dhcp.IPOption(dhcp.OptRequestedIP, netip.MustParseAddr("203.0.113.99")))
+	out, err := svc.Handle(context.Background(), Input{Packet: p, Iface: "eth0.20"})
+	require.NoError(t, err)
+	require.NotNil(t, out)
+	require.Equal(t, dhcp.MsgNak, out.Packet.MessageType())
+	require.Equal(t, 6, out.PCP)
+	require.Equal(t, 20, *out.VLAN)
+}
