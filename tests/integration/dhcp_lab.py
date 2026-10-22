@@ -129,7 +129,7 @@ def setup():
         ns(namespace, 'ip', 'link', 'set', peer, 'up')
     ip('addr', 'add', '198.18.10.1/24', 'dev', 'access0')
     for vlan in (20, 30):
-        ip('link', 'add', 'link', 'trunk0', 'name', f'trunk0.{vlan}', 'type', 'vlan', 'id', str(vlan))
+        ip('link', 'add', 'link', 'trunk0', 'name', f'trunk0.{vlan}', 'type', 'vlan', 'id', str(vlan), 'egress-qos-map', *[f'{i}:{i}' for i in range(8)])
         ip('addr', 'add', f'198.18.{vlan}.1/24', 'dev', f'trunk0.{vlan}')
         ip('link', 'set', f'trunk0.{vlan}', 'up')
         ns('tagged', 'ip', 'link', 'add', 'link', 'eth0', 'name', f'eth0.{vlan}', 'type', 'vlan', 'id', str(vlan))
@@ -170,7 +170,7 @@ relay:
   trusted_relays:
     - {giaddr: 198.18.40.1, subnet_id: net40}
 '''
-    config += 'vlans:\n' + ''.join(f'  - {{id: {v}, interface: trunk0.{v}, subnet_ref: net{v}}}\n' for v in (10, 20, 30, 40))
+    config += 'vlans:\n' + ''.join(f'  - {{id: {v}, interface: trunk0.{v}, priority: {6 if v == 20 else 5 if v == 30 else 0}, subnet_ref: net{v}}}\n' for v in (10, 20, 30, 40))
     config += 'subnets:\n' + ''.join(f'''  - id: net{v}
     network: 198.18.{v}.0/24
     range: [198.18.{v}.100, 198.18.{v}.110]
@@ -360,7 +360,7 @@ def main():
                     p.wait()
         log.close()
     # Validate wire-level tags and Option 82 echoed to the relay (ISC strips it downstream).
-    from scapy.all import rdpcap, Dot1Q, BOOTP, DHCP
+    from scapy.all import rdpcap, Dot1Q, BOOTP, DHCP, IP
     def wire():
         vlans = {int(p[Dot1Q].vlan) for p in rdpcap('/results/vlan-wire.pcap') if Dot1Q in p and BOOTP in p and p[BOOTP].op == 2}
         assert {20, 30}.issubset(vlans), f'no tagged replies on trunk: {vlans}'
@@ -376,6 +376,19 @@ def main():
                 echoed += 1
         assert echoed >= 2, 'expected both OFFER and ACK from relay capture'
     check('wire capture contains actual VLAN tags and exact Option 82 echo', wire)
+    def pcp_wire():
+        expected = {20: 6, 30: 5}
+        seen = set()
+        for p in rdpcap('/results/vlan-wire.pcap'):
+            if Dot1Q not in p or BOOTP not in p or p[IP].proto != 17 or p[BOOTP].op != 2:
+                continue
+            vid = int(p[Dot1Q].vlan)
+            if vid in expected:
+                assert int(p[Dot1Q].prio) == expected[vid], f'VLAN {vid}: PCP={p[Dot1Q].prio}, expected {expected[vid]}'
+                seen.add(vid)
+        assert seen == set(expected), f'missing VLAN replies: {seen}'
+    check('wire capture confirms PCP 6 on VLAN 20 and PCP 5 on VLAN 30', pcp_wire)
+
     (RESULTS / 'lease-snapshot.json').write_text(json.dumps(leases(), indent=2))
     (RESULTS / 'original-client.json').write_text(json.dumps(direct))
     report = {'platform': run('uname', '-a').strip(), 'server': run('godhcp', 'version').strip(), 'results': results}

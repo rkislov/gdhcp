@@ -88,6 +88,10 @@ func Open(ctx context.Context, driver, dsn string) (Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := s.prepareLeaseStatements(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -112,8 +116,10 @@ const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pra
 
 // SQLStore speaks database/sql to SQLite and PostgreSQL.
 type SQLStore struct {
-	db       *sql.DB
-	postgres bool
+	db        *sql.DB
+	postgres  bool
+	renewStmt *sql.Stmt
+	getStmt   *sql.Stmt
 }
 
 func (s *SQLStore) Close() error { return s.db.Close() }
@@ -233,21 +239,80 @@ func schemaStmts() []string {
 	}
 }
 
+// Renew the same binding without rewriting the MAC/subnet/VLAN indexes.
+// Metadata may change when a client renews directly after allocation by relay.
+const renewSQL = `UPDATE leases SET hostname = ?, giaddr = ?, circuit_id = ?, remote_id = ?, link_select = ?, state = ?, expires_at = ?
+WHERE ip = ? AND mac = ? AND client_id IS NOT DISTINCT FROM ? AND subnet_id IS NOT DISTINCT FROM ? AND vlan_id IS NOT DISTINCT FROM ?`
+const getLeaseSQL = `SELECT ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at FROM leases WHERE ip = ?`
+
+func (s *SQLStore) prepareLeaseStatements(ctx context.Context) error {
+	var err error
+	s.renewStmt, err = s.db.PrepareContext(ctx, s.q(renewSQL))
+	if err != nil {
+		return err
+	}
+	s.getStmt, err = s.db.PrepareContext(ctx, s.q(getLeaseSQL))
+	return err
+}
+
+func renewalArgs(l model.Lease) []any {
+	return []any{nullStr(l.Hostname), nullStr(l.GIAddr), nullStr(l.CircuitID), nullStr(l.RemoteID), nullStr(l.LinkSelect), l.State,
+		l.ExpiresAt.UTC().Format(time.RFC3339Nano), l.IP, l.MAC, nullStr(l.ClientID), nullStr(l.SubnetID), nullInt(l.VLANID)}
+}
+
 func (s *SQLStore) UpsertLease(ctx context.Context, l model.Lease) error {
 	if l.CreatedAt.IsZero() {
 		l.CreatedAt = time.Now().UTC()
+	}
+	// A single autocommit UPDATE is already atomic. A reply is allowed only
+	// after Exec returns, under the same WAL/synchronous policy as before.
+	if l.GIAddr == "" && s.leaseTransaction(ctx) == nil {
+		res, err := s.renewStmt.ExecContext(ctx, renewalArgs(l)...)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return nil
+		}
+	}
+	if tx := s.leaseTransaction(ctx); tx != nil {
+		return s.upsertInTransaction(ctx, tx, l)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.Rollback()
+	if err := s.upsertInTransaction(ctx, tx, l); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *SQLStore) upsertInTransaction(ctx context.Context, tx *sql.Tx, l model.Lease) error {
 	if l.GIAddr != "" {
 		if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO relays(giaddr, trusted, created_at) VALUES (?, 0, ?) ON CONFLICT(giaddr) DO NOTHING`), l.GIAddr, l.CreatedAt.UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
 	}
-	_, err = tx.ExecContext(ctx, s.q(`
+	{
+		res, err := tx.StmtContext(ctx, s.renewStmt).ExecContext(ctx, renewalArgs(l)...)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return nil
+		}
+	}
+	_, err := tx.ExecContext(ctx, s.q(`
 INSERT INTO leases(ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(ip) DO UPDATE SET
@@ -268,12 +333,13 @@ ON CONFLICT(ip) DO UPDATE SET
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
-
 func (s *SQLStore) GetLease(ctx context.Context, ip string) (model.Lease, error) {
-	row := s.db.QueryRowContext(ctx, s.q(`SELECT ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at FROM leases WHERE ip = ?`), ip)
-	return scanLease(row)
+	if tx := s.leaseTransaction(ctx); tx != nil {
+		return scanLease(tx.StmtContext(ctx, s.getStmt).QueryRowContext(ctx, ip))
+	}
+	return scanLease(s.getStmt.QueryRowContext(ctx, ip))
 }
 
 func (s *SQLStore) ListLeases(ctx context.Context, f model.LeaseFilter) ([]model.Lease, int, error) {
@@ -339,7 +405,13 @@ func (s *SQLStore) DeleteLease(ctx context.Context, ip string) error {
 }
 
 func (s *SQLStore) ActiveLeases(ctx context.Context, now time.Time) ([]model.Lease, error) {
-	rows, err := s.db.QueryContext(ctx, s.q(`SELECT ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at FROM leases WHERE state IN ('offered','bound','declined') AND expires_at > ?`), now.UTC().Format(time.RFC3339Nano))
+	var query interface {
+		QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+	} = s.db
+	if tx := s.leaseTransaction(ctx); tx != nil {
+		query = tx
+	}
+	rows, err := query.QueryContext(ctx, s.q(`SELECT ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at FROM leases WHERE state IN ('offered','bound','declined') AND expires_at > ?`), now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, err
 	}
@@ -620,4 +692,36 @@ func nullInt(v *int) any {
 		return nil
 	}
 	return *v
+}
+
+// WithLeaseTransaction groups lease operations on this context into one commit.
+// Other API requests retain their own contexts and cannot join the transaction.
+func (s *SQLStore) WithLeaseTransaction(ctx context.Context, fn func(context.Context) error) error {
+	if s.leaseTransaction(ctx) != nil {
+		return fmt.Errorf("nested lease transaction is unsupported")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	batchCtx := context.WithValue(ctx, leaseTransactionKey{}, leaseTransactionContext{store: s, tx: tx})
+	if err := fn(batchCtx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type leaseTransactionKey struct{}
+type leaseTransactionContext struct {
+	store *SQLStore
+	tx    *sql.Tx
+}
+
+func (s *SQLStore) leaseTransaction(ctx context.Context) *sql.Tx {
+	value, _ := ctx.Value(leaseTransactionKey{}).(leaseTransactionContext)
+	if value.store == s {
+		return value.tx
+	}
+	return nil
 }

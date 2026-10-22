@@ -39,19 +39,20 @@ type Prober interface {
 type Service struct {
 	// Serializes lease read/modify/write operations and pool reconciliation.
 	// mu only protects publication of the immutable configuration snapshot.
-	stateMu sync.Mutex
-	mu      sync.RWMutex
-	snap    *Snapshot
-	store   storage.Store
-	pools   *pool.Manager
-	log     *slog.Logger
-	metrics *metrics.Metrics
-	prober  Prober
-	now     func() time.Time
-	statsMu sync.Mutex
-	stats   map[string]*model.RelayStats
-	onBound func(model.Lease)
-	gen     int64
+	stateMu        sync.Mutex
+	needsReconcile bool
+	mu             sync.RWMutex
+	snap           *Snapshot
+	store          storage.Store
+	pools          *pool.Manager
+	log            *slog.Logger
+	metrics        *metrics.Metrics
+	prober         Prober
+	now            func() time.Time
+	statsMu        sync.Mutex
+	stats          map[string]*model.RelayStats
+	onBound        func(model.Lease)
+	gen            int64
 }
 
 // Options configures a Service.

@@ -16,6 +16,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -204,4 +205,108 @@ func TestSQLiteURIsAndPostgresPlaceholders(t *testing.T) {
 	require.Equal(t, "SELECT $1, $2", s.q("SELECT ?, ?"))
 	require.True(t, parseTime("").IsZero())
 	require.True(t, parseTime("invalid").IsZero())
+}
+
+func TestRenewalPreservesCreationAndUpdatesRelayMetadata(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	vlan := 10
+	created := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	l := model.Lease{IP: "192.168.10.100", MAC: "02:00:00:00:10:01", ClientID: "cid", SubnetID: "office", VLANID: &vlan, State: "bound", CreatedAt: created, ExpiresAt: created.Add(time.Hour)}
+	require.NoError(t, s.UpsertLease(ctx, l))
+	l.CreatedAt = created.Add(30 * time.Minute)
+	l.GIAddr = "10.0.0.1"
+	l.CircuitID = "port1"
+	l.RemoteID = "relay"
+	l.LinkSelect = "192.168.10.1"
+	l.Hostname = "renamed"
+	l.ExpiresAt = created.Add(2 * time.Hour)
+	require.NoError(t, s.UpsertLease(ctx, l))
+	got, err := s.GetLease(ctx, l.IP)
+	require.NoError(t, err)
+	l.CreatedAt = created
+	require.Equal(t, l, got)
+	relays, err := s.ListRelays(ctx)
+	require.NoError(t, err)
+	require.Len(t, relays, 1)
+	// A relay's automatic catalog row must also be recreated after catalog replacement.
+	require.NoError(t, s.ReplaceCatalog(ctx, Catalog{}))
+	require.NoError(t, s.UpsertLease(ctx, l))
+	relays, err = s.ListRelays(ctx)
+	require.NoError(t, err)
+	require.Len(t, relays, 1)
+	l.GIAddr = ""
+	l.RemoteID = ""
+	l.CircuitID = ""
+	l.LinkSelect = ""
+	l.ExpiresAt = created.Add(3 * time.Hour)
+	require.NoError(t, s.UpsertLease(ctx, l))
+	got, err = s.GetLease(ctx, l.IP)
+	require.NoError(t, err)
+	require.Equal(t, l, got)
+	// A different binding identity must take the full UPSERT path, not a partial renewal.
+	l.MAC = "02:00:00:00:10:02"
+	l.ClientID = "other"
+	l.SubnetID = "other-subnet"
+	otherVLAN := 20
+	l.VLANID = &otherVLAN
+	require.NoError(t, s.UpsertLease(ctx, l))
+	got, err = s.GetLease(ctx, l.IP)
+	require.NoError(t, err)
+	require.Equal(t, l, got)
+}
+
+func TestLeaseTransactionReadYourWritesAndRollback(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	batch := s.(interface {
+		WithLeaseTransaction(context.Context, func(context.Context) error) error
+	})
+	l := model.Lease{IP: "192.0.2.10", MAC: "client", SubnetID: "lan", State: "bound", ExpiresAt: time.Now().Add(time.Hour)}
+	stop := errors.New("reject transaction")
+	err := batch.WithLeaseTransaction(ctx, func(txCtx context.Context) error {
+		require.NoError(t, s.UpsertLease(txCtx, l))
+		got, err := s.GetLease(txCtx, l.IP)
+		require.NoError(t, err)
+		require.Equal(t, l.MAC, got.MAC)
+		active, err := s.ActiveLeases(txCtx, time.Now())
+		require.NoError(t, err)
+		require.Len(t, active, 1)
+		return stop
+	})
+	require.ErrorIs(t, err, stop)
+	_, err = s.GetLease(ctx, l.IP)
+	require.ErrorIs(t, err, ErrNotFound)
+	require.NoError(t, batch.WithLeaseTransaction(ctx, func(txCtx context.Context) error { return s.UpsertLease(txCtx, l) }))
+	_, err = s.GetLease(ctx, l.IP)
+	require.NoError(t, err)
+}
+
+func TestLeaseBatchRollsBackFirstWriteWhenSecondWriteFails(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t).(*SQLStore)
+	_, err := s.db.ExecContext(ctx, `CREATE TRIGGER reject_second BEFORE INSERT ON leases WHEN NEW.ip = '192.0.2.11' BEGIN SELECT RAISE(ABORT, 'disk write rejected'); END`)
+	require.NoError(t, err)
+	err = s.WithLeaseTransaction(ctx, func(txCtx context.Context) error {
+		l := model.Lease{IP: "192.0.2.10", MAC: "first", State: "bound", ExpiresAt: time.Now().Add(time.Hour)}
+		if err := s.UpsertLease(txCtx, l); err != nil {
+			return err
+		}
+		l.IP = "192.0.2.11"
+		l.MAC = "second"
+		return s.UpsertLease(txCtx, l)
+	})
+	require.ErrorContains(t, err, "disk write rejected")
+	for _, ip := range []string{"192.0.2.10", "192.0.2.11"} {
+		_, err = s.GetLease(ctx, ip)
+		require.ErrorIs(t, err, ErrNotFound)
+	}
+}
+
+func TestNestedLeaseBatchIsRejected(t *testing.T) {
+	s := openTestStore(t).(*SQLStore)
+	err := s.WithLeaseTransaction(context.Background(), func(txCtx context.Context) error {
+		return s.WithLeaseTransaction(txCtx, func(context.Context) error { t.Fatal("nested callback ran"); return nil })
+	})
+	require.ErrorContains(t, err, "nested lease transaction")
 }

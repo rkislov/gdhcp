@@ -122,10 +122,8 @@ func (m *Manager) Reconcile(specs []Spec, active []Binding) {
 		if st == nil {
 			continue
 		}
+		st.rebind(b.IP, b.MAC)
 		st.used[b.IP] = b.MAC
-		if b.MAC != "" {
-			st.byMAC[b.MAC] = b.IP
-		}
 		if b.ClientID != "" {
 			st.byClient[b.ClientID] = b.IP
 		}
@@ -245,6 +243,7 @@ func (m *Manager) Release(ip, mac string) {
 		return
 	}
 	if r, ok := st.reserved[ip]; ok {
+		st.rebind(ip, r.MAC)
 		st.used[ip] = r.MAC
 		return
 	}
@@ -267,11 +266,7 @@ func (m *Manager) Hold(ip string) {
 	if _, reserved := st.reserved[ip]; reserved {
 		return
 	}
-	for holder, prev := range st.byMAC {
-		if prev == ip {
-			delete(st.byMAC, holder)
-		}
-	}
+	st.rebind(ip, "")
 	st.used[ip] = "*held*"
 }
 
@@ -298,8 +293,8 @@ func (st *state) claim(ip netip.Addr, mac, clientID string) error {
 		if !macOK && !cidOK {
 			return ErrConflict
 		}
-		st.used[key] = mac
 		st.rebind(key, mac)
+		st.used[key] = mac
 		return nil
 	}
 	if !st.inRange(ip) || st.excluded(ip) {
@@ -319,10 +314,10 @@ func (st *state) claim(ip netip.Addr, mac, clientID string) error {
 }
 
 func (st *state) rebind(ip, mac string) {
-	for holder, prev := range st.byMAC {
-		if prev == ip && holder != mac {
-			delete(st.byMAC, holder)
-		}
+	// used is the reverse index. A MAC may retain several committed leases;
+	// only remove its preferred-address entry if that entry names this IP.
+	if previous := st.used[ip]; previous != "" && previous != mac && st.byMAC[previous] == ip {
+		delete(st.byMAC, previous)
 	}
 	if mac != "" {
 		st.byMAC[mac] = ip

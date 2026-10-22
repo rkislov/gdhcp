@@ -1,0 +1,104 @@
+{
+  "profile_enabled": false,
+  "kernel": "Linux be9e8ccade74 7.0.14-linuxkit #1 SMP PREEMPT Sun Sep 20 16:14:09 UTC 2026 aarch64 GNU/Linux",
+  "version": "godhcp 0.1.3\nCopyright 2026 \u041a\u0438\u0441\u043b\u043e\u0432 \u0420\u043e\u043c\u0430\u043d \u0421\u0435\u0440\u0433\u0435\u0435\u0432\u0438\u0447\nLicense: Apache-2.0",
+  "cpu_limit": "4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1",
+  "memory_limit_bytes": "2147483648",
+  "duration_seconds": 30,
+  "seeded_bound_leases": 100000,
+  "sqlite_pragmas": [
+    "journal_mode=WAL",
+    "synchronous=NORMAL"
+  ],
+  "logging": "error",
+  "ping_check": false,
+  "scope": "UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak",
+  "results": [
+    {
+      "actual_send_rps": 4999.996657335568,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 30.011041472,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 0.6438,
+        "p95": 1.658926,
+        "p99": 2.947967
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "direct",
+      "reply_rps_including_drain": 4998.160431718056,
+      "send_errors": 0,
+      "sending_seconds": 30.000020056,
+      "sent": 150000,
+      "target_rps": 5000,
+      "unanswered": 0,
+      "valid_replies": 150000,
+      "server_cpu_seconds": 19.22,
+      "sqlite_integrity_check": "ok",
+      "updated_leases": 100000,
+      "expected_updated_leases_if_all_replied": 100000,
+      "lease_identities_ok": true,
+      "relay_metadata_ok": true,
+      "committed_updates_ok": true,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "116976 kB",
+        "VmRSS": "66664 kB"
+      }
+    },
+    {
+      "actual_send_rps": 9999.95134257009,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 30.011837514,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 1.51222,
+        "p95": 6.682552,
+        "p99": 136.257092
+      },
+      "latency_origin": "scheduled_send",
+      "mode": "relay",
+      "reply_rps_including_drain": 9996.055718349642,
+      "send_errors": 0,
+      "sending_seconds": 30.000145973,
+      "sent": 300000,
+      "target_rps": 10000,
+      "unanswered": 0,
+      "valid_replies": 300000,
+      "server_cpu_seconds": 27.16,
+      "sqlite_integrity_check": "ok",
+      "updated_leases": 100000,
+      "expected_updated_leases_if_all_replied": 100000,
+      "lease_identities_ok": true,
+      "relay_metadata_ok": true,
+      "committed_updates_ok": true,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true,
+      "server_memory_kib": {
+        "VmHWM": "105020 kB",
+        "VmRSS": "63856 kB"
+      }
+    }
+  ],
+  "source_base": "dd511689053c83dff2ee7a96318f24a43c246e99",
+  "working_tree_modified": true,
+  "measured_on": "2026-10-22",
+  "stage": "optimized, extended 30s renewal validation"
+}
