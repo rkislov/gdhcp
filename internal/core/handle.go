@@ -16,6 +16,8 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/pool"
 	"github.com/kislovrs/godhcp/internal/relay"
+	"github.com/kislovrs/godhcp/internal/storage"
 )
 
 // Input is one DHCP datagram plus the interface it arrived on.
@@ -47,9 +50,11 @@ type Output struct {
 func (s *Service) Handle(ctx context.Context, in Input) (*Output, error) {
 	start := time.Now()
 	defer func() { s.metrics.Duration.Observe(time.Since(start).Seconds()) }()
-	if in.Packet == nil {
+	if in.Packet == nil || in.Packet.Op != dhcp.BootRequest {
 		return nil, nil
 	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
 	snap := s.current()
 	if snap == nil {
 		return nil, nil
@@ -107,7 +112,7 @@ func (s *Service) dispatch(ctx context.Context, snap *Snapshot, in Input) (*Outp
 		sub = snap.defaultSubnet()
 		source = "default-pool"
 	}
-	if sub == nil && !pkt.Relayed() {
+	if sub == nil && !pkt.Relayed() && vlanID == nil {
 		if ip := clientAddr(pkt); ip.IsValid() {
 			if by := snap.byIP(ip); by != nil {
 				sub = by
@@ -145,9 +150,9 @@ func (s *Service) dispatch(ctx context.Context, snap *Snapshot, in Input) (*Outp
 	case dhcp.MsgRequest:
 		return s.request(ctx, snap, pkt, sub, mac, vlanID, circuit, remote, link)
 	case dhcp.MsgDecline:
-		return s.decline(ctx, snap, pkt, sub, mac, vlanID, circuit, remote)
+		return s.decline(ctx, snap, pkt, sub, mac)
 	case dhcp.MsgRelease:
-		return s.release(ctx, pkt, sub, mac, vlanID, circuit, remote)
+		return s.release(ctx, snap, pkt, sub, mac)
 	case dhcp.MsgInform:
 		out := s.ack(snap, pkt, sub, netip.Addr{}, 0, 0, 0, pkt.Hostname(), vlanID, false)
 		s.log.Info("dhcp inform", "mac", mac, "subnet", sub.ID, "vlan", vlanLabel(vlanID))
@@ -163,6 +168,7 @@ func (s *Service) offer(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, s
 	}
 	requested, _ := pkt.RequestedIP()
 	var leased netip.Addr
+	var bound bool
 	allocated := false
 	for attempt := 0; attempt < 4; attempt++ {
 		ip, err := s.pools.Allocate(sub.ID, mac, pkt.ClientID(), requested, strict)
@@ -170,14 +176,21 @@ func (s *Service) offer(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, s
 			s.log.Warn("pool allocate failed", "subnet", sub.ID, "mac", mac, "err", err)
 			return nil, nil
 		}
-		if s.needsPing(snap, sub, mac, ip) && !s.addressFree(ctx, snap, ip) {
+		previous, err := s.store.GetLease(ctx, ip.String())
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return nil, fmt.Errorf("read lease before offer: %w", err)
+		}
+		bound = err == nil && leaseOwnedBy(previous, sub.ID, mac, pkt.ClientID(), s.now()) && previous.State == model.StateBound
+		if !bound && s.needsPing(snap, sub, mac, ip) && !s.addressFree(ctx, snap, ip) {
 			s.pools.Hold(ip.String())
-			s.persist(ctx, snap, sub, model.Lease{
+			if err := s.persist(ctx, model.Lease{
 				IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID,
 				VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
 				LinkSelect: addrString(link), State: model.StateDeclined,
 				ExpiresAt: s.now().Add(snap.Cfg.Server.DeclineHold),
-			})
+			}); err != nil {
+				return nil, err
+			}
 			requested = netip.Addr{}
 			strict = false
 			continue
@@ -194,11 +207,16 @@ func (s *Service) offer(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, s
 	if leaseFor <= 0 {
 		leaseFor = time.Minute
 	}
-	s.persist(ctx, snap, sub, model.Lease{
-		IP: leased.String(), MAC: mac, ClientID: pkt.ClientID(), Hostname: hostname, SubnetID: sub.ID,
-		VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
-		LinkSelect: addrString(link), State: model.StateOffered, ExpiresAt: s.now().Add(leaseFor),
-	})
+	// A retransmitted DISCOVER must not shorten an already committed lease.
+	if !bound {
+		if err := s.persist(ctx, model.Lease{
+			IP: leased.String(), MAC: mac, ClientID: pkt.ClientID(), Hostname: hostname, SubnetID: sub.ID,
+			VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
+			LinkSelect: addrString(link), State: model.StateOffered, ExpiresAt: s.now().Add(leaseFor),
+		}); err != nil {
+			return nil, err
+		}
+	}
 	d, t1, t2 := sub.timers(pkt, snap.Cfg.Server.LeaseMax)
 	s.log.Info("dhcp offer", "mac", mac, "ip", leased.String(), "subnet", sub.ID, "vlan", vlanLabel(vlanID), "giaddr", addrString(pkt.GIAddr), "circuit_id", circuit, "remote_id", remote)
 	return s.ack(snap, pkt, sub, leased, d, t1, t2, hostname, vlanID, true), nil
@@ -225,12 +243,6 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 		}
 		return nil, nil
 	}
-	if by := snap.byIP(want); by != nil && by.ID != sub.ID && !pkt.Relayed() {
-		sub = by
-		if vlanID == nil {
-			vlanID = sub.VLAN
-		}
-	}
 	leased, err := s.pools.Allocate(sub.ID, mac, pkt.ClientID(), want, true)
 	if err != nil {
 		if snap.Cfg.Server.Authoritative {
@@ -247,7 +259,9 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 		VLANID: vlanID, GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
 		LinkSelect: addrString(link), State: model.StateBound, ExpiresAt: s.now().Add(d),
 	}
-	s.persist(ctx, snap, sub, rec)
+	if err := s.persist(ctx, rec); err != nil {
+		return nil, err
+	}
 	if s.onBound != nil {
 		go s.onBound(rec)
 	}
@@ -255,51 +269,91 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 	return s.ack(snap, pkt, sub, leased, d, t1, t2, hostname, vlanID, false), nil
 }
 
-func (s *Service) decline(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string) (*Output, error) {
+// leaseOwnedBy requires the same binding identity and a live lease in this subnet.
+func leaseOwnedBy(l model.Lease, subnet, mac, clientID string, now time.Time) bool {
+	return mac != "" && l.SubnetID == subnet && l.MAC == mac && l.ClientID == clientID &&
+		(l.State == model.StateBound || l.State == model.StateOffered) && l.ExpiresAt.After(now)
+}
+
+func (s *Service) controlledLease(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string, ip netip.Addr) (model.Lease, bool, error) {
+	if !ip.IsValid() || ip.IsUnspecified() || !sub.Prefix.Contains(ip) {
+		return model.Lease{}, false, nil
+	}
+	if id, ok := snap.serverID(); ok {
+		if got, has := pkt.ServerID(); has && got != id {
+			return model.Lease{}, false, nil
+		}
+	}
+	l, err := s.store.GetLease(ctx, ip.String())
+	if errors.Is(err, storage.ErrNotFound) {
+		return model.Lease{}, false, nil
+	}
+	if err != nil {
+		return model.Lease{}, false, fmt.Errorf("read controlled lease: %w", err)
+	}
+	return l, leaseOwnedBy(l, sub.ID, mac, pkt.ClientID(), s.now()), nil
+}
+
+func (s *Service) decline(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string) (*Output, error) {
 	ip, ok := pkt.RequestedIP()
 	if !ok {
 		ip = pkt.CIAddr
 	}
-	if ip.IsValid() {
-		s.pools.Hold(ip.String())
-		s.persist(ctx, snap, sub, model.Lease{
-			IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID, VLANID: vlanID,
-			GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
-			State: model.StateDeclined, ExpiresAt: s.now().Add(snap.Cfg.Server.DeclineHold),
-		})
-		s.log.Warn("dhcp decline", "mac", mac, "ip", ip.String(), "subnet", sub.ID)
+	l, owned, err := s.controlledLease(ctx, snap, pkt, sub, mac, ip)
+	if err != nil || !owned {
+		return nil, err
 	}
+	l.State = model.StateDeclined
+	l.ExpiresAt = s.now().Add(snap.Cfg.Server.DeclineHold)
+	if err := s.persist(ctx, l); err != nil {
+		return nil, err
+	}
+	s.pools.Hold(ip.String())
+	s.log.Warn("dhcp decline", "mac", mac, "ip", ip.String(), "subnet", sub.ID)
 	return nil, nil
 }
 
-func (s *Service) release(ctx context.Context, pkt *dhcp.Packet, sub *Subnet, mac string, vlanID *int, circuit, remote string) (*Output, error) {
+func (s *Service) release(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, mac string) (*Output, error) {
 	ip := pkt.CIAddr
 	if !ip.IsValid() || ip.IsUnspecified() {
 		if req, ok := pkt.RequestedIP(); ok {
 			ip = req
 		}
 	}
-	if !ip.IsValid() {
-		return nil, nil
+	l, owned, err := s.controlledLease(ctx, snap, pkt, sub, mac, ip)
+	if err != nil || !owned {
+		return nil, err
+	}
+	l.State = model.StateReleased
+	l.ExpiresAt = s.now()
+	if err := s.persist(ctx, l); err != nil {
+		return nil, err
 	}
 	s.pools.Release(ip.String(), mac)
-	_ = s.store.UpsertLease(ctx, model.Lease{
-		IP: ip.String(), MAC: mac, ClientID: pkt.ClientID(), SubnetID: sub.ID, VLANID: vlanID,
-		GIAddr: addrString(pkt.GIAddr), CircuitID: circuit, RemoteID: remote,
-		State: model.StateReleased, ExpiresAt: s.now(),
-	})
 	s.log.Info("dhcp release", "mac", mac, "ip", ip.String(), "subnet", sub.ID)
 	return nil, nil
 }
 
-func (s *Service) persist(ctx context.Context, snap *Snapshot, sub *Subnet, l model.Lease) {
+// persist is called under stateMu. A failed write must never result in a reply.
+func (s *Service) persist(ctx context.Context, l model.Lease) error {
 	if l.CreatedAt.IsZero() {
 		l.CreatedAt = s.now()
 	}
 	if err := s.store.UpsertLease(ctx, l); err != nil {
 		s.log.Error("persist lease", "ip", l.IP, "err", err)
-		s.pools.Release(l.IP, l.MAC)
+		// Restore committed occupancy when reads still work. If the database is
+		// unavailable, retain occupancy conservatively until the next reconciliation.
+		leases, readErr := s.store.ActiveLeases(ctx, s.now())
+		if readErr == nil {
+			if snap := s.current(); snap != nil {
+				s.pools.Reconcile(snap.Pools, bindingsOf(leases))
+			}
+		} else {
+			s.log.Error("restore pool after failed lease write", "err", readErr)
+		}
+		return fmt.Errorf("persist lease %s: %w", l.IP, err)
 	}
+	return nil
 }
 
 func (s *Service) needsPing(snap *Snapshot, sub *Subnet, mac string, ip netip.Addr) bool {
@@ -346,7 +400,7 @@ func (s *Service) owns(ctx context.Context, subnet, mac string, ip netip.Addr) b
 	if err != nil {
 		return false
 	}
-	return l.MAC == mac && (l.State == model.StateBound || l.State == model.StateOffered) && l.ExpiresAt.After(s.now())
+	return l.SubnetID == subnet && l.MAC == mac && (l.State == model.StateBound || l.State == model.StateOffered) && l.ExpiresAt.After(s.now())
 }
 
 func (s *Service) answerNew(snap *Snapshot, mac string, haveLease bool) bool {
@@ -358,17 +412,22 @@ func (s *Service) answerNew(snap *Snapshot, mac string, haveLease bool) bool {
 
 func (s *Service) nak(snap *Snapshot, pkt *dhcp.Packet, reason string) *Output {
 	reply := baseReply(pkt)
+	reply.CIAddr = netip.IPv4Unspecified()
+	reply.Flags |= 0x8000
 	reply.Append(dhcp.ByteOption(dhcp.OptMessageType, dhcp.MsgNak))
 	if id, ok := snap.serverID(); ok {
 		reply.Append(dhcp.IPOption(dhcp.OptServerID, id))
-		reply.SIAddr = id
 	}
 	reply.Append(dhcp.StringOption(dhcp.OptMessage, reason))
 	if cid, ok := pkt.Get(dhcp.OptClientID); ok {
 		reply.Append(dhcp.Option{Code: dhcp.OptClientID, Data: cid})
 	}
 	echo82(snap, pkt, reply)
-	return &Output{Packet: reply, Dest: destination(pkt, netip.Addr{}), VLAN: nil}
+	dest := &net.UDPAddr{IP: net.IPv4bcast, Port: 68}
+	if pkt.Relayed() {
+		dest = &net.UDPAddr{IP: ipv4(pkt.GIAddr), Port: 67}
+	}
+	return &Output{Packet: reply, Dest: dest, VLAN: nil}
 }
 
 func (s *Service) ack(snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, yi netip.Addr, lease, t1, t2 time.Duration, hostname string, vlanID *int, offer bool) *Output {
@@ -535,9 +594,6 @@ func firstCircuit(infos []*relay.Info) string {
 }
 
 func vlanFromIface(snap *Snapshot, name string) (int, bool) {
-	if id, ok := vlanName(name); ok {
-		return id, true
-	}
 	for _, iface := range snap.Cfg.Server.Interfaces {
 		if iface.Name != name {
 			continue
@@ -545,6 +601,14 @@ func vlanFromIface(snap *Snapshot, name string) (int, bool) {
 		if iface.Mode == "access" && iface.VLAN >= 1 && iface.VLAN <= 4094 {
 			return iface.VLAN, true
 		}
+	}
+	for _, v := range snap.Cfg.VLANs {
+		if v.Interface != "" && v.Interface == name {
+			return v.ID, true
+		}
+	}
+	if id, ok := vlanName(name); ok {
+		return id, true
 	}
 	return 0, false
 }
@@ -619,10 +683,10 @@ func destination(req *dhcp.Packet, yi netip.Addr) *net.UDPAddr {
 	if req.CIAddr.IsValid() && !req.CIAddr.IsUnspecified() {
 		return &net.UDPAddr{IP: ipv4(req.CIAddr), Port: 68}
 	}
-	if req.Broadcast() || !yi.IsValid() {
-		return &net.UDPAddr{IP: net.IPv4bcast, Port: 68}
-	}
-	return &net.UDPAddr{IP: ipv4(yi), Port: 68}
+	// An unconfigured client cannot answer the kernel's ARP for yiaddr.
+	// This UDP transport cannot unicast to chaddr at layer 2; RFC 2131
+	// section 4.1 permits broadcast when such unicast is not possible.
+	return &net.UDPAddr{IP: net.IPv4bcast, Port: 68}
 }
 
 func ipv4(ip netip.Addr) net.IP {

@@ -1,21 +1,6 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "dashboard.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="dashboard">
-{{template "nav" .}}
-<main>
-  <h1>Обзор</h1>
-  <div id="status" class="grid"></div>
-  <section class="card">
-    <h2>Утилизация VLAN</h2>
-    <div id="vlans"></div>
-  </section>
-  <p id="err" class="error"></p>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "dashboard.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head>
+<body data-page="dashboard" data-ui-prefix="{{.Prefix}}" >{{template "nav" .}}<main id="main" class="app-main">{{template "page-header" .}}<div id="status" class="grid grid-cols-2 gap-4 xl:grid-cols-4" aria-live="polite"><div class="stat-card"><span class="muted">Загрузка состояния сервера…</span></div></div>
+<div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]"><section class="card"><div class="card-heading"><div><h2>Адресные пулы</h2><p class="mt-1 text-xs text-slate-400">Занятость по сегментам сети</p></div><a href="{{.Prefix}}/vlans" class="btn-quiet">Все VLAN <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a></div><div id="vlans" class="divide-y divide-slate-100 dark:divide-slate-800"></div></section>
+<section class="card"><div class="card-heading"><h2>О сервере</h2><span class="badge badge-info">DHCPv4</span></div><dl id="server-details" class="px-5"></dl><div class="border-t border-slate-100 p-5 dark:border-slate-800"><a href="{{.Prefix}}/logs" class="btn w-full"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 4 5-4 5m7 0h7"/><rect x="2" y="3" width="20" height="18" rx="2"/></svg>Открыть журнал</a></div></section></div>
+<section class="card"><div class="card-heading"><div><h2>Аренды в сети</h2><p class="mt-1 text-xs text-slate-400">Текущие записи DHCP-сервера</p></div><a href="{{.Prefix}}/leases" class="btn-quiet">Все аренды <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></a></div><div class="table-wrap"><table><thead><tr><th>IP-адрес</th><th>Устройство / MAC</th><th>Подсеть</th><th>Состояние</th><th>Истекает</th></tr></thead><tbody id="recent-leases"></tbody></table></div></section></main>{{template "foot" .}}</body></html>{{end}}

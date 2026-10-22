@@ -1,0 +1,48 @@
+# Configure the interface, server_id and pool for your isolated test network.
+# DHCP is disabled until listen is changed to :67. No default credentials.
+server:
+  listen: "-"
+  server_id: 192.168.50.2
+  interfaces:
+    - name: eth0
+      mode: access
+      vlan: 50
+  authoritative: true
+  ping_check: false
+  manage_links: false
+  lease_default: 1h
+  lease_max: 24h
+database:
+  driver: sqlite
+  dsn: /var/lib/godhcp/leases.db
+api:
+  listen: "127.0.0.1:8080"
+  auth:
+    jwt_secret: "${JWT_SECRET}"
+    users:
+      - username: admin
+        password_hash: "${GODHCP_ADMIN_HASH}"
+        role: admin
+web:
+  enabled: true
+  path: /ui
+vlans:
+  - id: 50
+    name: lab
+    interface: eth0
+    subnet_ref: lab
+subnets:
+  - id: lab
+    network: 192.168.50.0/24
+    range: [192.168.50.100, 192.168.50.150]
+    gateway: 192.168.50.1
+    dns: [192.168.50.1]
+    vlan: 50
+relay:
+  enabled: false
+metrics:
+  enabled: true
+  listen: "127.0.0.1:9090"
+logging:
+  level: info
+  format: json

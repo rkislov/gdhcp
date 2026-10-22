@@ -20,6 +20,8 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+
+	"github.com/kislovrs/godhcp/internal/version"
 )
 
 //go:embed templates/*.html static/*
@@ -29,9 +31,11 @@ var pages = template.Must(template.ParseFS(assets, "templates/*.html"))
 
 // Page is the data passed into every HTML template.
 type Page struct {
-	Title  string
-	Active string
-	Prefix string
+	Title       string
+	Active      string
+	Prefix      string
+	Version     string
+	Description string
 }
 
 // Handler serves multi-page HTML templates and static assets under Prefix.
@@ -63,9 +67,11 @@ func Handler(prefix string) http.Handler {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := pages.ExecuteTemplate(w, name, Page{
-			Title:  title,
-			Active: active,
-			Prefix: prefix,
+			Title:       title,
+			Active:      active,
+			Prefix:      prefix,
+			Version:     version.Version,
+			Description: descriptions[active],
 		}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -81,13 +87,13 @@ func route(path string) (name, title, active string) {
 	case "subnets":
 		return "subnets.html", "Подсети", "subnets"
 	case "reservations":
-		return "reservations.html", "Резервы", "reservations"
+		return "reservations.html", "Резервации", "reservations"
 	case "vlans":
 		return "vlans.html", "VLAN", "vlans"
 	case "relays":
-		return "relays.html", "Relay", "relays"
+		return "relays.html", "Relay-агенты", "relays"
 	case "config":
-		return "config.html", "Конфиг", "config"
+		return "config.html", "Конфигурация", "config"
 	case "logs":
 		return "logs.html", "Журнал", "logs"
 	case "users":
@@ -97,4 +103,16 @@ func route(path string) (name, title, active string) {
 	default:
 		return "", "", ""
 	}
+}
+
+var descriptions = map[string]string{
+	"dashboard":    "Состояние сервера, адресные пулы и аренды клиентов.",
+	"leases":       "Выданные адреса и состояние клиентов в вашей сети.",
+	"subnets":      "Сети, диапазоны выдачи и параметры подключения.",
+	"reservations": "Постоянные IP-адреса для устройств и клиентов.",
+	"vlans":        "Сегменты сети и использование адресных пулов.",
+	"relays":       "Доверенные агенты и проверка маршрутизации по Circuit ID.",
+	"config":       "Проверка, экспорт и применение настроек сервера.",
+	"logs":         "События сервера в реальном времени.",
+	"users":        "Учётные записи и права доступа к управлению.",
 }

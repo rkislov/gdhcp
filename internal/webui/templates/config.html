@@ -1,23 +1,4 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "config.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="config">
-{{template "nav" .}}
-<main>
-  <h1>Конфигурация</h1>
-  <textarea id="yaml" spellcheck="false"></textarea>
-  <div class="row">
-    <button type="button" id="check">Проверить</button>
-    <button type="button" class="primary" id="save">Применить</button>
-    <button type="button" id="reload">Перечитать файл</button>
-  </div>
-  <p id="msg"></p>
-  <p id="err" class="error"></p>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "config.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head>
+<body data-page="config" data-ui-prefix="{{.Prefix}}" data-role-page="admin">{{template "nav" .}}<main id="main" class="app-main">{{template "page-header" .}}<div class="notice">Изменения применяются к работающему серверу. Адреса слушателей, TLS и подключение к БД требуют перезапуска. Экспорт YAML скрывает JWT и API-ключи.</div>
+<section class="card"><div class="card-heading"><div class="flex items-center gap-3"><span class="mono text-slate-500">config.yml</span><span id="editor-status" class="badge">Загрузка…</span></div><button class="btn-quiet" id="export-config" type="button"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>Экспорт YAML</button></div><div class="p-1"><label for="yaml" class="sr-only">YAML конфигурация</label><textarea id="yaml" class="min-h-[540px] resize-y rounded-none border-0 bg-white p-5 text-[12px] leading-6 focus:ring-0 dark:bg-slate-900" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div><div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 p-4 dark:border-slate-800"><span class="text-xs text-slate-400" id="editor-lines">YAML</span><div class="flex flex-wrap gap-2"><button type="button" class="btn" id="reload">Перечитать файл</button><button type="button" class="btn" id="check"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Проверить</button><button type="button" class="btn btn-primary" id="save">Применить</button></div></div></section><p id="msg" class="text-sm" role="status"></p></main>{{template "foot" .}}</body></html>{{end}}

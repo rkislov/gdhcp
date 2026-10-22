@@ -6,7 +6,7 @@
 
 ## Быстрый старт
 
-Нужен Go 1.26+. Веб-интерфейс — обычные Go-шаблоны и JS, уже вшиты в бинарник (`go:embed`).
+Нужен Go 1.26+. Веб-интерфейс — Go-шаблоны, JavaScript и Tailwind CSS, уже вшитые в бинарник (`go:embed`). Для сборки Go используется готовый CSS; после изменения интерфейса выполните `npm ci` и `npm run build:css`.
 
 ```bash
 make build
@@ -56,17 +56,19 @@ docker run -d --name godhcp \
 
 - DHCPv4: DISCOVER, OFFER, REQUEST, ACK, NAK, DECLINE, RELEASE, INFORM.
 - Пулы, резервации по MAC и client-id, authoritative / non-authoritative, ping-check, PXE (`next_server`, `boot_file`).
-- VLAN: сопоставление интерфейса и идентификатора с подсетью, PCP в кадре Ethernet, опция 43, неизвестный VLAN (`ignore` / `nak` / `default-pool`). Создание VLAN-интерфейса через netlink — на Linux, если `server.manage_links: true`.
+- VLAN: сопоставление интерфейса и идентификатора с подсетью, PCP в модели ответа (без установки в Ethernet текущим транспортом), опция 43, неизвестный VLAN (`ignore` / `nak` / `default-pool`). Создание VLAN-интерфейса через netlink — на Linux, если `server.manage_links: true`.
 - Relay: опция 82 (sub-option 1, 2, 5, 151, 152), эхо без изменений, link-selection, доверенные relay, лимит hops, парсеры Circuit ID (Cisco, Huawei, MikroTik, Juniper, Aruba, HP, Extreme, Brocade, UniFi и свои regex).
 - SQLite по умолчанию и PostgreSQL. Выдача адреса транзакционная.
 - REST API, JWT и API-ключи, роли `admin` / `operator` / `viewer`.
-- Веб-интерфейс на Go `html/template` + JS: обзор, аренды, подсети, резервации, VLAN, relay, редактор YAML, журнал (SSE), пользователи.
+- Веб-интерфейс на Go `html/template` + JS + Tailwind CSS: обзор, аренды, подсети, резервации, VLAN, relay, редактор YAML, журнал (SSE), пользователи.
 - Метрики Prometheus, JSON-логи (`log/slog`), `/healthz` и `/readyz`.
 
 DHCPv6, обновления DDNS и отказоустойчивость по RFC 8156 в эту поставку не входят: в конфигурации есть заготовки, рабочий протокол — DHCPv4. Балансировка `ha` делит новых клиентов по хэшу RFC 3074 и не совместима с ISC failover по проводу.
 
 ## Документация
 
+- [Руководство администратора и экспорт настроек ISC DHCP](docs/admin-guide.md)
+- [Сборка Linux-пакетов и PDF](docs/building.md)
 - [Архитектура](docs/architecture.md)
 - [Конфигурация](docs/configuration.md)
 - [API](docs/api.md)
@@ -92,3 +94,9 @@ Apache License, Version 2.0. Copyright 2026 Кислов Роман Сергее
 Полный текст — в файле [LICENSE](LICENSE). Уведомление об авторстве — в [NOTICE](NOTICE). Сторонние компоненты — в [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
 
 Программа распространяется «AS IS», без гарантий, как описано в разделах 7 и 8 Apache License 2.0.
+
+## DHCP на изолированном Linux-стенде
+
+`make test-dhcp-docker` проверяет реальную выдачу и продление адресов, VLAN 802.1Q, ISC relay с Option 82, восстановление SQLite после перезапуска сервера и пересоздания контейнера. Рабочая сеть не подключается: все интерфейсы внутри контейнера с `--network none`. Результаты и захваты пакетов: `output/dhcp-lab/`. Требования и ограничения: [инструкция администратора](docs/admin-guide.md#повторяемый-сетевой-стенд-в-docker).
+
+`make test-systemd-vm` проверяет пакетную службу в полноценных QEMU ARM64-гостях Debian 12 и Rocky Linux 9: автозапуск после перезагрузки ядра, reload, права и SQLite. Подробности: [systemd-стенд](docs/admin-guide.md#проверка-systemd-с-настоящей-перезагрузкой-linux).

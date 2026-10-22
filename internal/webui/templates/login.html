@@ -1,21 +1,6 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "login.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="login">
-<main class="login">
-  <form id="login" class="card">
-    <h1>GoDHCP</h1>
-    <p class="muted">Вход в панель управления</p>
-    <label>Имя<input name="username" value="admin" autocomplete="username"></label>
-    <label>Пароль<input name="password" type="password" autocomplete="current-password"></label>
-    <button class="primary" type="submit">Войти</button>
-    <p id="err" class="error"></p>
-  </form>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "login.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head><body data-page="login" data-ui-prefix="{{.Prefix}}">
+<main class="grid min-h-screen lg:grid-cols-[1fr_1fr]">
+<section class="relative hidden flex-col justify-between overflow-hidden bg-slate-950 p-12 text-white lg:flex xl:p-16"><a class="flex items-center gap-3 text-2xl font-semibold tracking-tight" href="{{.Prefix}}/"><span class="brand-mark"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="9" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v3h12V9M12 12v3"/></svg></span>GoDHCP</a><div class="max-w-lg"><span class="mb-8 inline-flex rounded-full border border-slate-700 px-3 py-1.5 text-[10px] uppercase tracking-[.2em] text-slate-400">Управление адресным пространством</span><h1 class="text-4xl leading-[1.2] font-medium text-white xl:text-5xl">Ваша сеть.<br>Под вашим контролем.</h1><p class="mt-6 max-w-md text-sm leading-7 text-slate-400">Адресные пулы, VLAN и DHCP relay — в одном месте. Контролируйте выдачу адресов и следите за состоянием сети.</p><div class="mt-12 grid grid-cols-3 gap-5 border-t border-slate-800 pt-6"><div><strong class="text-sm font-medium">DHCPv4</strong><p class="mt-1 text-xs text-slate-500">Адресация</p></div><div><strong class="text-sm font-medium">VLAN</strong><p class="mt-1 text-xs text-slate-500">Сегментация</p></div><div><strong class="text-sm font-medium">Option 82</strong><p class="mt-1 text-xs text-slate-500">DHCP relay</p></div></div></div><p class="text-xs text-slate-600">GoDHCP v{{.Version}} · Панель администратора</p></section>
+<section class="flex items-center justify-center bg-white px-6 py-12 dark:bg-slate-900"><div class="w-full max-w-[360px]"><a href="{{.Prefix}}/" class="mb-14 flex items-center gap-3 text-xl font-semibold lg:hidden"><span class="brand-mark"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="9" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v3h12V9M12 12v3"/></svg></span>GoDHCP</a><span class="text-[10px] font-semibold uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Панель управления</span><h1 class="mt-3 text-3xl">Вход в GoDHCP</h1><p class="mt-3 text-sm leading-6 text-slate-500">Введите учётные данные администратора или оператора.</p><form id="login" class="mt-8 space-y-5"><label>Имя пользователя<input name="username" placeholder="admin" autocomplete="username" required autofocus></label><label>Пароль<span class="relative block"><input name="password" id="password" type="password" placeholder="Введите пароль" class="pr-11" autocomplete="current-password" required><button class="btn-icon absolute top-1 right-1" type="button" id="password-toggle" aria-label="Показать пароль"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></span></label><p id="caps-lock" class="text-xs text-amber-600" hidden>Включён Caps Lock</p><label class="flex-row items-center gap-2 font-normal"><input class="size-4" name="remember" type="checkbox">Запомнить вход на этом устройстве</label><p id="err" class="error" role="alert"></p><button class="btn btn-primary w-full py-3" type="submit">Войти в панель <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></form><p class="mt-8 border-t border-slate-100 pt-6 text-xs leading-6 text-slate-400 dark:border-slate-800">Доступ предоставляется администратором сервера. Используйте защищённое подключение к панели.</p><div class="mt-10 flex items-center justify-between text-[10px] text-slate-400"><span>GoDHCP v{{.Version}}</span><button class="btn-quiet" type="button" id="theme-btn">Сменить тему</button></div></div></section>
+</main>{{template "foot" .}}</body></html>{{end}}

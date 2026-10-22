@@ -45,3 +45,19 @@ func TestPagesAndStatic(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Contains(t, rec.Body.String(), `data-page="leases"`)
 }
+
+func TestAllPagesAndCustomPrefix(t *testing.T) {
+	for _, prefix := range []string{"/ui", "/network"} {
+		for _, page := range []string{"", "leases", "subnets", "reservations", "vlans", "relays", "config", "logs", "users", "login"} {
+			t.Run(prefix+"/"+page, func(t *testing.T) {
+				rec := httptest.NewRecorder()
+				Handler(prefix).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, prefix+"/"+page, nil))
+				require.Equal(t, http.StatusOK, rec.Code)
+				require.Contains(t, rec.Body.String(), `data-ui-prefix="`+prefix+`"`)
+				require.Contains(t, rec.Body.String(), `src="`+prefix+`/static/ui-helpers.js"`)
+				require.NotContains(t, rec.Body.String(), "GODHCP_UI_PREFIX=")
+				require.NotContains(t, rec.Body.String(), "ZgotmplZ")
+			})
+		}
+	}
+}

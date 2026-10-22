@@ -1,33 +1,46 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
 {{define "head"}}
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · GoDHCP</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark"><title>{{.Title}} · GoDHCP</title>
 <link rel="stylesheet" href="{{.Prefix}}/static/style.css">
+<script src="{{.Prefix}}/static/ui-helpers.js"></script>
 {{end}}
-
 {{define "nav"}}
-<header>
-  <a class="brand" href="{{.Prefix}}/">GoDHCP</a>
-  <nav>
-    <a href="{{.Prefix}}/" class="{{if eq .Active "dashboard"}}active{{end}}">Обзор</a>
-    <a href="{{.Prefix}}/leases" class="{{if eq .Active "leases"}}active{{end}}">Аренды</a>
-    <a href="{{.Prefix}}/subnets" class="{{if eq .Active "subnets"}}active{{end}}">Подсети</a>
-    <a href="{{.Prefix}}/reservations" class="{{if eq .Active "reservations"}}active{{end}}">Резервы</a>
-    <a href="{{.Prefix}}/vlans" class="{{if eq .Active "vlans"}}active{{end}}">VLAN</a>
-    <a href="{{.Prefix}}/relays" class="{{if eq .Active "relays"}}active{{end}}">Relay</a>
-    <a href="{{.Prefix}}/config" class="{{if eq .Active "config"}}active{{end}}">Конфиг</a>
-    <a href="{{.Prefix}}/logs" class="{{if eq .Active "logs"}}active{{end}}">Журнал</a>
-    <a href="{{.Prefix}}/users" class="{{if eq .Active "users"}}active{{end}}">Пользователи</a>
-  </nav>
-  <span class="spacer"></span>
-  <button type="button" id="theme-btn">Тема</button>
-  <button type="button" id="logout-btn" hidden>Выход</button>
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:p-3">К содержимому</a>
+<div id="sidebar-overlay" class="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" hidden></div>
+<aside id="sidebar" class="app-sidebar" aria-label="Главная навигация">
+ <a class="brand" href="{{.Prefix}}/"><span class="brand-mark"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="3" width="6" height="6" rx="1.5"/><rect x="9" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v3h12V9M12 12v3"/></svg></span>GoDHCP</a>
+ <nav class="flex-1 overflow-y-auto px-4 pb-5"><p class="nav-group-label">УПРАВЛЕНИЕ СЕТЬЮ</p>
+<a href="{{.Prefix}}/" class="nav-link {{if eq .Active "dashboard"}}active{{end}}" {{if eq .Active "dashboard"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Обзор</span></a>
+<a href="{{.Prefix}}/leases" class="nav-link {{if eq .Active "leases"}}active{{end}}" {{if eq .Active "leases"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h4m-4 5h10m-2-5h2"/></svg><span>Аренды</span></a>
+<a href="{{.Prefix}}/subnets" class="nav-link {{if eq .Active "subnets"}}active{{end}}" {{if eq .Active "subnets"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="5" rx="1"/><rect x="2" y="16" width="7" height="5" rx="1"/><rect x="15" y="16" width="7" height="5" rx="1"/><path d="M12 8v4m-7 4v-4h14v4"/></svg><span>Подсети</span></a>
+<a href="{{.Prefix}}/reservations" class="nav-link {{if eq .Active "reservations"}}active{{end}}" {{if eq .Active "reservations"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg><span>Резервации</span></a>
+<a href="{{.Prefix}}/vlans" class="nav-link {{if eq .Active "vlans"}}active{{end}}" {{if eq .Active "vlans"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 10 5-10 5L2 8l10-5Zm-9 9 9 5 9-5m-18 5 9 5 9-5"/></svg><span>VLAN</span></a>
+<a href="{{.Prefix}}/relays" class="nav-link {{if eq .Active "relays"}}active{{end}}" {{if eq .Active "relays"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h16m-4-4 4 4-4 4m6 6H5m4-4-4 4 4 4"/></svg><span>Relay-агенты</span></a>
+<p class="nav-group-label">СИСТЕМА</p>
+<a href="{{.Prefix}}/config" class="nav-link {{if eq .Active "config"}}active{{end}}" data-role-min="admin" {{if eq .Active "config"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="16" cy="12" r="2" fill="currentColor"/><circle cx="8" cy="18" r="2" fill="currentColor"/></svg><span>Конфигурация</span></a>
+<a href="{{.Prefix}}/logs" class="nav-link {{if eq .Active "logs"}}active{{end}}" {{if eq .Active "logs"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7 4 5-4 5m7 0h7"/><rect x="2" y="3" width="20" height="18" rx="2"/></svg><span>Журнал</span></a>
+<a href="{{.Prefix}}/users" class="nav-link {{if eq .Active "users"}}active{{end}}" data-role-min="admin" {{if eq .Active "users"}}aria-current="page"{{end}}><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21v-3a7 7 0 0 1 14 0v3m0-18a4 4 0 0 1 0 8m3 4a6 6 0 0 1 3 6"/></svg><span>Пользователи</span></a></nav>
+ <div class="border-t border-slate-100 p-4 dark:border-slate-800">
+  <div class="flex items-center gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50">
+   <span id="user-initial" class="flex size-8 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">—</span>
+   <div class="min-w-0 flex-1"><div id="user-name" class="truncate text-xs font-semibold">Подключение…</div><div id="user-role" class="mt-1 text-[10px] text-slate-400">Управление сетью</div></div>
+   <button type="button" id="logout-btn" class="btn-icon" aria-label="Выйти" title="Выйти" hidden><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v16h5m6-12 4 4-4 4m4-4H9"/></svg></button>
+  </div>
+  <div class="mt-4 flex items-center justify-between px-2 text-[10px] text-slate-400"><span>DHCPv4 · Панель управления</span><span>v{{.Version}}</span></div>
+ </div>
+</aside>
+<header class="app-topbar">
+ <div class="flex min-w-0 items-center gap-3"><button class="btn-icon lg:hidden" id="menu-btn" aria-label="Открыть меню" aria-expanded="false" aria-controls="sidebar"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="flex min-w-0 items-center gap-2 text-xs"><span class="hidden text-slate-400 sm:inline">Управление сетью</span><span class="hidden text-slate-300 sm:inline">/</span><span class="truncate font-medium">{{.Title}}</span></div></div>
+ <div class="flex shrink-0 items-center gap-2 sm:gap-4"><span class="hidden items-center gap-2 text-[11px] text-slate-500 sm:inline-flex" id="connection"><span class="size-1.5 rounded-full bg-slate-300" id="connection-dot"></span><span id="connection-text">Подключение к API</span></span><button class="btn-icon" id="refresh-btn" title="Обновить данные" aria-label="Обновить данные"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9"/></svg></button><button class="btn-icon" id="theme-btn" title="Сменить тему" aria-label="Сменить тему"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 13A9 9 0 0 1 11 3.5 9 9 0 1 0 20.5 13Z"/></svg></button></div>
 </header>
 {{end}}
-
+{{define "page-header"}}
+<div class="page-heading"><div><h1>{{.Title}}</h1><p class="page-description">{{.Description}}</p></div><div id="page-meta" class="pt-1 text-xs text-slate-400"></div></div>
+<p id="err" class="error" role="alert"></p>
+{{end}}
 {{define "foot"}}
-<script>window.GODHCP_UI_PREFIX={{printf "%q" .Prefix}};</script>
-<script src="{{.Prefix}}/static/app.js"></script>
+<dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description"><h2 id="confirm-title"></h2><p id="confirm-description" class="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400"></p><div class="mt-6 flex justify-end gap-2"><button type="button" class="btn" id="confirm-cancel">Отмена</button><button type="button" class="btn btn-danger" id="confirm-ok">Подтвердить</button></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="{{.Prefix}}/static/app.js" defer></script>
 {{end}}

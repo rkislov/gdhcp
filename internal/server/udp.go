@@ -25,30 +25,67 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-// Serve reads DHCPv4 datagrams until ctx is cancelled.
-func Serve(ctx context.Context, addr string, svc *core.Service, log *slog.Logger) error {
-	if log == nil {
-		log = slog.Default()
-	}
+// Listener owns a bound DHCP UDP socket.
+type Listener struct {
+	conn    *net.UDPConn
+	pc      *ipv4.PacketConn
+	control bool
+}
+
+// Listen binds before the process reports readiness to its service manager.
+func Listen(addr string) (*Listener, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	conn, err := net.ListenUDP("udp4", udpAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer conn.Close()
-	if raw, err := conn.SyscallConn(); err == nil {
-		_ = raw.Control(func(fd uintptr) {
-			_ = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
+	raw, err := conn.SyscallConn()
+	if err == nil {
+		var optionErr error
+		err = raw.Control(func(fd uintptr) {
+			optionErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_BROADCAST, 1)
 		})
+		if err == nil {
+			err = optionErr
+		}
+	}
+	if err != nil {
+		conn.Close()
+		return nil, err
 	}
 	pc := ipv4.NewPacketConn(conn)
 	control := pc.SetControlMessage(ipv4.FlagInterface, true) == nil
+	return &Listener{conn: conn, pc: pc, control: control}, nil
+}
+
+func (l *Listener) Close() error { return l.conn.Close() }
+
+// Serve reads DHCPv4 datagrams until ctx is cancelled.
+func Serve(ctx context.Context, addr string, svc *core.Service, log *slog.Logger) error {
+	l, err := Listen(addr)
+	if err != nil {
+		return err
+	}
+	return l.Serve(ctx, svc, log)
+}
+
+func (l *Listener) Serve(ctx context.Context, svc *core.Service, log *slog.Logger) error {
+	if log == nil {
+		log = slog.Default()
+	}
+	defer l.Close()
+	conn, pc, control := l.conn, l.pc, l.control
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-done:
+		}
 	}()
 	buf := make([]byte, 4096)
 	for {
@@ -57,8 +94,7 @@ func Serve(ctx context.Context, addr string, svc *core.Service, log *slog.Logger
 			if ctx.Err() != nil {
 				return nil
 			}
-			log.Debug("dhcp read", "err", err)
-			continue
+			return err
 		}
 		pkt, err := dhcp.Parse(buf[:n])
 		if err != nil {
@@ -85,10 +121,13 @@ func Serve(ctx context.Context, addr string, svc *core.Service, log *slog.Logger
 			continue
 		}
 		if control && cm != nil {
-			_, _ = pc.WriteTo(raw, &ipv4.ControlMessage{IfIndex: cm.IfIndex}, out.Dest)
-			continue
+			_, err = pc.WriteTo(raw, &ipv4.ControlMessage{IfIndex: cm.IfIndex}, out.Dest)
+		} else {
+			_, err = conn.WriteTo(raw, out.Dest)
 		}
-		_, _ = conn.WriteTo(raw, out.Dest)
+		if err != nil {
+			log.Error("dhcp send", "err", err, "to", out.Dest, "interface", iface)
+		}
 	}
 }
 

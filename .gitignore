@@ -7,5 +7,8 @@
 *.db-shm
 .DS_Store
 coverage.out
+/output/
+/tmp/
+/node_modules/
 *.test
 .env

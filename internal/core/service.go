@@ -37,6 +37,9 @@ type Prober interface {
 
 // Service is the DHCP core: config snapshot, pools and lease persistence.
 type Service struct {
+	// Serializes lease read/modify/write operations and pool reconciliation.
+	// mu only protects publication of the immutable configuration snapshot.
+	stateMu sync.Mutex
 	mu      sync.RWMutex
 	snap    *Snapshot
 	store   storage.Store
@@ -94,6 +97,8 @@ func New(ctx context.Context, opt Options) (*Service, error) {
 
 // Apply validates and installs a configuration without dropping the process.
 func (s *Service) Apply(ctx context.Context, cfg *config.Config) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
 	if cfg == nil {
 		return fmt.Errorf("core: nil config")
 	}
@@ -202,6 +207,8 @@ func (s *Service) noteRelay(giaddr, circuit, remote string, vlan *int, unknown b
 
 // ExpireOnce marks elapsed leases and returns their addresses to the pools.
 func (s *Service) ExpireOnce(ctx context.Context) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
 	n, err := s.store.ExpireLeases(ctx, s.now())
 	if err != nil || n == 0 {
 		return err
@@ -238,6 +245,8 @@ func (s *Service) RunJanitor(ctx context.Context, every time.Duration) {
 
 // DeleteLease removes a binding and frees the address.
 func (s *Service) DeleteLease(ctx context.Context, ip string) error {
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
 	l, err := s.store.GetLease(ctx, ip)
 	if err != nil {
 		return err
