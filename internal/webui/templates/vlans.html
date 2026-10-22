@@ -1,24 +1,3 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "vlans.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="vlans">
-{{template "nav" .}}
-<main>
-  <h1>VLAN</h1>
-  <form id="create" class="card row">
-    <input name="id" placeholder="ID" required>
-    <input name="name" placeholder="имя">
-    <input name="subnet_ref" placeholder="subnet_ref">
-    <input name="priority" placeholder="PCP 0-7">
-    <button class="primary" type="submit">Добавить</button>
-  </form>
-  <div id="list"></div>
-  <p id="err" class="error"></p>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "vlans.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head>
+<body data-page="vlans" data-ui-prefix="{{.Prefix}}" >{{template "nav" .}}<main id="main" class="app-main">{{template "page-header" .}}<details class="card" data-role-min="admin"><summary><span class="flex items-center gap-2 text-sm"><svg class="size-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить VLAN</span><svg class="details-chevron size-4 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><form id="create" class="form-grid"><label>VLAN ID<input name="id" type="number" placeholder="10" required min="1" max="4094"></label><label>Название<input name="name" type="text" placeholder="Офис" ></label><label>Подсеть<select name="subnet_ref" id="subnet-select"><option value="">Выберите подсеть</option></select></label><label>Интерфейс<input name="interface" type="text" placeholder="eth0.10" ></label><label>Приоритет PCP<input name="priority" type="number" placeholder="0" min="0" max="7"></label><div class="form-actions"><button class="btn btn-primary w-full sm:w-auto" type="submit"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить</button></div></form></details><section class="card"><div class="card-heading"><h2>Сегменты сети</h2><span id="table-count" class="badge">Загрузка…</span></div><div class="table-wrap"><table><thead><tr><th scope="col">VLAN</th><th scope="col">Название</th><th scope="col">Интерфейс</th><th scope="col">Подсеть</th><th scope="col">Занятость пула</th><th scope="col">Действия</th></tr></thead><tbody id="list"><tr><td colspan="6" class="empty-state">Загрузка данных…</td></tr></tbody></table></div></section></main>{{template "foot" .}}</body></html>{{end}}

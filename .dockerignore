@@ -1,0 +1,13 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+.git
+node_modules
+bin
+dist
+output
+tmp
+*.db
+*.db-wal
+*.db-shm
+coverage.out
+.DS_Store

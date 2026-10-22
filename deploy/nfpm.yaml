@@ -1,0 +1,48 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+
+name: godhcp
+arch: ${PACKAGE_ARCH}
+platform: linux
+version: ${PACKAGE_VERSION}
+release: "1"
+section: net
+priority: optional
+maintainer: "Кислов Роман Сергеевич"
+description: DHCPv4 server with SQLite persistence, REST API and embedded web UI.
+vendor: "Кислов Роман Сергеевич"
+homepage: https://github.com/rkislov/gdhcp
+license: Apache-2.0
+contents:
+  - src: ${PACKAGE_BINARY}
+    dst: /usr/bin/godhcp
+    file_info:
+      mode: 0755
+  - src: deploy/systemd/godhcp.service
+    dst: /usr/lib/systemd/system/godhcp.service
+  - src: deploy/package/config.yml.example
+    dst: /etc/godhcp/config.yml.example
+    type: config|noreplace
+  - src: docs/
+    dst: /usr/share/doc/godhcp/
+    type: tree
+  - src: output/pdf/godhcp-admin-guide.pdf
+    dst: /usr/share/doc/godhcp/admin-guide.pdf
+  - src: LICENSE
+    dst: /usr/share/licenses/godhcp/LICENSE
+  - src: NOTICE
+    dst: /usr/share/licenses/godhcp/NOTICE
+  - src: THIRD_PARTY_LICENSES
+    dst: /usr/share/licenses/godhcp/THIRD_PARTY_LICENSES
+  - src: third_party/
+    dst: /usr/share/licenses/godhcp/third_party/
+    type: tree
+scripts:
+  postinstall: deploy/package/postinstall.sh
+  preremove: deploy/package/preremove.sh
+  postremove: deploy/package/postremove.sh
+overrides:
+  deb:
+    depends: [systemd, passwd, procps]
+  rpm:
+    depends: [systemd, shadow-utils]

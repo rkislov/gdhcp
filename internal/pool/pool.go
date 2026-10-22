@@ -308,11 +308,8 @@ func (st *state) claim(ip netip.Addr, mac, clientID string) error {
 	if owner, used := st.used[key]; used && owner != "" && owner != mac {
 		return ErrConflict
 	}
-	if prev, ok := st.byMAC[mac]; ok && prev != key {
-		if _, reserved := st.reserved[prev]; !reserved {
-			delete(st.used, prev)
-		}
-	}
+	// A previous address may still have a valid persisted lease. Only an
+	// explicit release or reconciliation with storage may free that address.
 	st.rebind(key, mac)
 	st.used[key] = mac
 	if clientID != "" {

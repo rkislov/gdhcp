@@ -1,27 +1,3 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "users.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="users">
-{{template "nav" .}}
-<main>
-  <h1>Пользователи</h1>
-  <form id="create" class="card row">
-    <input name="username" placeholder="username" required>
-    <input name="password" type="password" placeholder="пароль" required>
-    <select name="role">
-      <option>admin</option>
-      <option>operator</option>
-      <option>viewer</option>
-    </select>
-    <button class="primary" type="submit">Создать</button>
-  </form>
-  <ul id="list" class="card"></ul>
-  <p id="err" class="error"></p>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "users.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head>
+<body data-page="users" data-ui-prefix="{{.Prefix}}" data-role-page="admin">{{template "nav" .}}<main id="main" class="app-main">{{template "page-header" .}}<details class="card" data-role-min="admin"><summary><span class="flex items-center gap-2 text-sm"><svg class="size-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Создать пользователя</span><svg class="details-chevron size-4 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><form id="create" class="form-grid"><label>Имя пользователя<input name="username" type="text" placeholder="operator" required ></label><label>Пароль<input name="password" type="password" placeholder="Новый пароль" required autocomplete="new-password" minlength="8"></label><label>Роль<select name="role" id="role-select"><option value="viewer">Наблюдатель — только чтение</option><option value="operator">Оператор — аренды и резервации</option><option value="admin">Администратор — полный доступ</option></select></label><div class="form-actions"><button class="btn btn-primary w-full sm:w-auto" type="submit"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Создать</button></div></form></details><section class="card"><div class="card-heading"><h2>Учётные записи</h2><span id="table-count" class="badge">Загрузка…</span></div><div class="table-wrap"><table><thead><tr><th scope="col">Пользователь</th><th scope="col">Роль</th><th scope="col">Доступ</th><th scope="col">Действия</th></tr></thead><tbody id="list"><tr><td colspan="4" class="empty-state">Загрузка данных…</td></tr></tbody></table></div></section><p class="text-xs leading-6 text-slate-500">При удалении пользователя уже выданные токены пока не отзываются автоматически. Для немедленного завершения всех JWT-сеансов смените секрет сервера.</p></main>{{template "foot" .}}</body></html>{{end}}

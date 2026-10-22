@@ -1,29 +1,3 @@
-{{/* Copyright 2026 Кислов Роман Сергеевич
-Licensed under the Apache License, Version 2.0. */}}
-{{define "reservations.html"}}
-<!DOCTYPE html>
-<html lang="ru">
-<head>{{template "head" .}}</head>
-<body data-page="reservations">
-{{template "nav" .}}
-<main>
-  <h1>Резервы</h1>
-  <form id="create" class="card row">
-    <input name="mac" placeholder="MAC">
-    <input name="ip" placeholder="IP" required>
-    <input name="subnet_id" placeholder="subnet id" required>
-    <input name="hostname" placeholder="hostname">
-    <button class="primary" type="submit">Добавить</button>
-  </form>
-  <div class="card table-wrap">
-    <table>
-      <thead><tr><th>ID</th><th>MAC</th><th>IP</th><th>Подсеть</th><th></th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-  </div>
-  <p id="err" class="error"></p>
-</main>
-{{template "foot" .}}
-</body>
-</html>
-{{end}}
+{{/* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */}}
+{{define "reservations.html"}}<!DOCTYPE html><html lang="ru"><head>{{template "head" .}}</head>
+<body data-page="reservations" data-ui-prefix="{{.Prefix}}" >{{template "nav" .}}<main id="main" class="app-main">{{template "page-header" .}}<details class="card" data-role-min="operator"><summary><span class="flex items-center gap-2 text-sm"><svg class="size-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить резервацию</span><svg class="details-chevron size-4 text-slate-400 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary><form id="create" class="form-grid"><label>MAC-адрес<input name="mac" type="text" placeholder="aa:bb:cc:dd:ee:ff" ></label><label>Client ID (hex)<input name="client_id" type="text" placeholder="Вместо MAC, если нужен" ></label><label>Постоянный IP<input name="ip" type="text" placeholder="192.168.10.50" required ></label><label>Подсеть<select name="subnet_id" id="subnet-select"><option value="">Выберите подсеть</option></select></label><label>Имя устройства<input name="hostname" type="text" placeholder="printer-01" ></label><div class="form-actions"><button class="btn btn-primary w-full sm:w-auto" type="submit"><svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить</button></div></form></details><section class="card"><div class="card-heading"><h2>Постоянные адреса</h2><span id="table-count" class="badge">Загрузка…</span></div><div class="table-wrap"><table><thead><tr><th scope="col">IP-адрес</th><th scope="col">MAC / Client ID</th><th scope="col">Имя устройства</th><th scope="col">Подсеть</th><th scope="col">Действия</th></tr></thead><tbody id="rows"><tr><td colspan="5" class="empty-state">Загрузка данных…</td></tr></tbody></table></div></section></main>{{template "foot" .}}</body></html>{{end}}

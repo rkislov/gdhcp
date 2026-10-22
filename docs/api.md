@@ -1,5 +1,7 @@
 # API
 
+© 2026 Кислов Роман Сергеевич. Apache License 2.0.
+
 Спецификация OpenAPI 3.1: `api/openapi.yaml`, в работающем процессе — `GET /api/openapi.yaml`. Swagger UI: `/swagger`.
 
 Аутентификация: `Authorization: Bearer <jwt>`, заголовок `X-API-Key` или query `access_token` (его использует живой журнал, потому что EventSource не ставит заголовок).

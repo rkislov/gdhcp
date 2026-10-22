@@ -150,14 +150,17 @@ func (s *Server) swagger(w http.ResponseWriter, _ *http.Request) {
 	_, _ = io.WriteString(w, swaggerHTML)
 }
 
-func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	cfg := s.svc.Config()
+	principal, _ := principalFrom(r.Context())
 	active := 0
 	for _, st := range s.svc.PoolStats() {
 		active += st.Active
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":        version.Version,
+		"username":       principal.Name,
+		"role":           principal.Role,
 		"author":         version.Author,
 		"authoritative":  cfg.Server.Authoritative,
 		"uptime_seconds": time.Since(s.started).Seconds(),

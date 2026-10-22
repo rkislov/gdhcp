@@ -1,0 +1,19 @@
+{
+  "name": "godhcp-webui",
+  "version": "0.1.3",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i internal/webui/styles/input.css -o internal/webui/static/style.css --minify",
+    "watch:css": "tailwindcss -i internal/webui/styles/input.css -o internal/webui/static/style.css --watch",
+    "test:ui": "node --test internal/webui/tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  },
+  "overrides": {
+    "@parcel/watcher": "2.6.0"
+  },
+  "license": "Apache-2.0",
+  "author": "Кислов Роман Сергеевич"
+}

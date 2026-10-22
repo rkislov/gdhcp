@@ -72,6 +72,10 @@ func TestHTTP(t *testing.T) {
 
 		res = get(t, ts.URL+"/api/v1/status", tok.AccessToken)
 		require.Equal(t, http.StatusOK, res.StatusCode)
+		var status map[string]any
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&status))
+		require.Equal(t, "admin", status["username"])
+		require.Equal(t, auth.RoleAdmin, status["role"])
 
 		res = postJSON(t, ts.URL+"/api/v1/auth/login", "", map[string]string{"username": "view", "password": "secret"})
 		require.Equal(t, http.StatusOK, res.StatusCode)
