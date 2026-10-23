@@ -27,7 +27,7 @@ for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/
   cp -R third_party docs "$stage_dir/"
   mkdir -p "$stage_dir/configs"
   cp configs/example.yml configs/dev.yml "$stage_dir/configs/"
-  tar -czf "$release_dir/$binary.tar.gz" -C "$stage_dir" .
+  COPYFILE_DISABLE=1 tar -czf "$release_dir/$binary.tar.gz" -C "$stage_dir" .
   rm -rf "$stage_dir"
   trap - EXIT
 done
