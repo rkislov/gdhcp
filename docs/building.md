@@ -39,7 +39,7 @@ python3 -m venv /tmp/godhcp-pdf-env
 
 Для бинарников Linux (amd64, 386, armv7, arm64) и macOS (amd64, arm64) выполните `make binaries`. PDF, Node.js и nFPM не нужны. Raspberry Pi с 32-битной ARMv7 ОС использует `linux_armv7`, с 64-битной ОС — `linux_arm64`. На macOS Intel используйте `darwin_amd64`, на Apple Silicon — `darwin_arm64`.
 
-Результат: `dist/releases/<version>/godhcp_<version>_<os>_<arch>`, архивы `.tar.gz` и `SHA256SUMS`. Каждый архив содержит бинарник `godhcp`, примеры конфигурации, README, LICENSE, NOTICE и уведомления сторонних компонентов. При распространении отдельных бинарников также приложите эти лицензионные файлы. Команда `make packages` отдельно собирает пакеты Linux amd64/arm64.
+Результат: `dist/releases/<version>/godhcp_<version>_<os>_<arch>`, архивы `.tar.gz` и `SHA256SUMS`. Каждый архив содержит бинарник `godhcp`, примеры конфигурации, README, каталог docs с инструкцией по веб-интерфейсу и скриншотами, LICENSE, NOTICE и уведомления сторонних компонентов. При распространении отдельных бинарников также приложите эти лицензионные файлы. Команда `make packages` отдельно собирает пакеты Linux amd64/arm64.
 
 Сначала подготовьте PDF. Затем из корня репозитория:
 
@@ -89,3 +89,18 @@ GOTOOLCHAIN=go1.26.0 go tool cover -func=coverage.out
 ## Нагрузочный стенд DHCP и relay
 
 `make test-load-docker` собирает сервер и Go-генератор, создаёт изолированный контейнер с лимитом 4 vCPU и 2 GiB RAM, заполняет SQLite 100 000 арендами и выполняет UDP-тесты. Для изменения длительности: `bash scripts/test-load-docker.sh --seconds 60`. Отчёт: `output/load-lab/report.json`. Описание методики и результаты — [docs/performance.md](performance.md). Генератор находится под build-tag `loadtest` и не включён в производственный бинарник.
+
+## PDF-инструкция по веб-интерфейсу
+
+`docs/web-guide.md` содержит пошаговую инструкцию, а `docs/images/web-guide/` - настоящие скриншоты демонстрационной панели без рабочих данных. Готовый `docs/godhcp-web-guide.pdf` включается во все архивы бинарников вместе с остальным каталогом `docs/`.
+
+Для пересборки PDF установите Python-пакеты `reportlab` и `pypdf`, а также шрифты DejaVu (как для общего руководства администратора), затем выполните:
+
+```bash
+# На Linux шрифты по умолчанию: /usr/share/fonts/truetype/dejavu.
+# При другом расположении задайте GODHCP_PDF_FONTS.
+make web-guide-pdf
+make binaries
+```
+
+PDF содержит оглавление, закладки и встроенные уведомления Apache 2.0 и лицензии шрифтов. Перед публикацией проверьте страницы после рендеринга через `pdftoppm`.

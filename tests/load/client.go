@@ -33,9 +33,10 @@ import (
 )
 
 type sample struct {
-	sent     time.Time
-	received bool
-	client   int
+	sent       time.Time
+	actualSent time.Time
+	received   bool
+	client     int
 }
 
 func main() {
@@ -65,7 +66,14 @@ func main() {
 	total := *rate * *seconds
 	samples := make([]sample, total+1)
 	var mu sync.Mutex
-	var latencies []float64
+	latencies := make([]float64, 0, total)
+	rtts := make([]float64, 0, total)
+	lags := make([]float64, 0, total)
+	var slow []map[string]any
+	var slowCount int
+	var maxLatency float64
+	var sampleSecond int64
+	var samplesThisSecond int
 	valid, invalid, duplicates, sendErrors := 0, 0, 0, 0
 	done := make(chan struct{})
 	agent := []byte{1, 8, 'l', 'o', 'a', 'd', ':', '1', '0', '0', 2, 9, 'l', 'o', 'a', 'd', 'r', 'e', 'l', 'a', 'y'}
@@ -115,7 +123,24 @@ func main() {
 			}
 			s.received = true
 			valid++
-			latencies = append(latencies, float64(now.Sub(s.sent))/float64(time.Millisecond))
+			latency := float64(now.Sub(s.sent)) / float64(time.Millisecond)
+			rtt := float64(now.Sub(s.actualSent)) / float64(time.Millisecond)
+			latencies = append(latencies, latency)
+			rtts = append(rtts, rtt)
+			if latency > maxLatency {
+				maxLatency = latency
+			}
+			if latency >= 20 {
+				slowCount++
+			}
+			if now.Unix() != sampleSecond {
+				sampleSecond = now.Unix()
+				samplesThisSecond = 0
+			}
+			if latency >= 20 && len(slow) < 1000 && samplesThisSecond < 20 {
+				samplesThisSecond++
+				slow = append(slow, map[string]any{"xid": p.XID, "scheduled_unix_ns": s.sent.UnixNano(), "sent_unix_ns": s.actualSent.UnixNano(), "received_unix_ns": now.UnixNano(), "latency_ms": latency, "rtt_ms": rtt})
+			}
 			mu.Unlock()
 		}
 	}()
@@ -149,7 +174,9 @@ func main() {
 			panic(err)
 		}
 		mu.Lock()
-		samples[i] = sample{sent: scheduled, client: id}
+		actualSent := time.Now()
+		samples[i] = sample{sent: scheduled, actualSent: actualSent, client: id}
+		lags = append(lags, float64(actualSent.Sub(scheduled))/float64(time.Millisecond))
 		mu.Unlock()
 		if _, err = conn.WriteToUDP(raw, dest); err != nil {
 			sendErrors++
@@ -170,6 +197,8 @@ func main() {
 	conn.Close()
 	<-done
 	sort.Float64s(latencies)
+	sort.Float64s(rtts)
+	sort.Float64s(lags)
 	pct := func(q float64) float64 {
 		if len(latencies) == 0 {
 			return 0
@@ -177,6 +206,17 @@ func main() {
 		return latencies[int(float64(len(latencies)-1)*q)]
 	}
 	report := map[string]any{"mode": *mode, "kind": *kind, "target_rps": *rate, "clients": *clients, "sent": total, "send_errors": sendErrors, "valid_replies": valid, "invalid_replies": invalid, "duplicate_replies": duplicates, "unanswered": total - sendErrors - valid, "sending_seconds": sending.Seconds(), "elapsed_seconds": elapsed.Seconds(), "actual_send_rps": float64(total) / sending.Seconds(), "reply_rps_including_drain": float64(valid) / elapsed.Seconds(), "latency_origin": "scheduled_send", "latency_ms": map[string]float64{"p50": pct(.5), "p95": pct(.95), "p99": pct(.99)}, "drain_seconds": *drain}
+	percentile := func(values []float64) float64 {
+		if len(values) == 0 {
+			return 0
+		}
+		return values[int(float64(len(values)-1)*.99)]
+	}
+	report["actual_rtt_p99_ms"] = percentile(rtts)
+	report["send_lag_p99_ms"] = percentile(lags)
+	report["slow_samples"] = slow
+	report["slow_replies_ge_20ms"] = slowCount
+	report["max_latency_ms"] = maxLatency
 	json.NewEncoder(os.Stdout).Encode(report)
 }
 func clientMAC(id int) net.HardwareAddr {

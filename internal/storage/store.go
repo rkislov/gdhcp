@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kislovrs/godhcp/internal/model"
@@ -63,6 +64,7 @@ type Store interface {
 
 // Open creates a SQLite or PostgreSQL store and applies migrations.
 func Open(ctx context.Context, driver, dsn string) (Store, error) {
+	managedCheckpoint := driver == "sqlite" && !strings.Contains(dsn, "_pragma") && !strings.Contains(dsn, ":memory:") && !strings.Contains(dsn, "mode=memory")
 	sqlDriver := driver
 	switch driver {
 	case "sqlite":
@@ -92,6 +94,12 @@ func Open(ctx context.Context, driver, dsn string) (Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if managedCheckpoint {
+		if err := s.startCheckpoint(ctx, dsn); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+	}
 	return s, nil
 }
 
@@ -112,17 +120,34 @@ func sqliteDSN(dsn string) string {
 	return "file:" + dsn + "?" + sqlitePragmas
 }
 
-const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
+const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=wal_autocheckpoint(16384)"
 
 // SQLStore speaks database/sql to SQLite and PostgreSQL.
 type SQLStore struct {
-	db        *sql.DB
-	postgres  bool
-	renewStmt *sql.Stmt
-	getStmt   *sql.Stmt
+	db               *sql.DB
+	postgres         bool
+	renewStmt        *sql.Stmt
+	getStmt          *sql.Stmt
+	checkpointDB     *sql.DB
+	checkpointCancel context.CancelFunc
+	checkpointDone   chan struct{}
+	closeOnce        sync.Once
+	closeErr         error
 }
 
-func (s *SQLStore) Close() error { return s.db.Close() }
+func (s *SQLStore) Close() error {
+	s.closeOnce.Do(func() {
+		if s.checkpointCancel != nil {
+			s.checkpointCancel()
+			<-s.checkpointDone
+		}
+		s.closeErr = s.db.Close()
+		if s.checkpointDB != nil {
+			s.closeErr = errors.Join(s.closeErr, s.checkpointDB.Close())
+		}
+	})
+	return s.closeErr
+}
 
 func (s *SQLStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
@@ -290,7 +315,7 @@ func (s *SQLStore) UpsertLease(ctx context.Context, l model.Lease) error {
 	if err := s.upsertInTransaction(ctx, tx, l); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return commitLeaseTx(tx)
 }
 
 func (s *SQLStore) upsertInTransaction(ctx context.Context, tx *sql.Tx, l model.Lease) error {
@@ -709,7 +734,7 @@ func (s *SQLStore) WithLeaseTransaction(ctx context.Context, fn func(context.Con
 	if err := fn(batchCtx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return commitLeaseTx(tx)
 }
 
 type leaseTransactionKey struct{}
