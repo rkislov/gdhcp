@@ -102,3 +102,5 @@ Apache License, Version 2.0. Copyright 2026 Кислов Роман Сергее
 `make test-systemd-vm` проверяет пакетную службу в полноценных QEMU ARM64-гостях Debian 12 и Rocky Linux 9: автозапуск после перезагрузки ядра, reload, права и SQLite. Подробности: [systemd-стенд](docs/admin-guide.md#проверка-systemd-с-настоящей-перезагрузкой-linux).
 
 Результаты проверки PCP и нагрузки DHCP/relay: [docs/performance.md](docs/performance.md).
+
+[Пошаговая инструкция по веб-интерфейсу для начинающих администраторов](docs/web-guide.md) и [PDF со скриншотами](docs/godhcp-web-guide.pdf).

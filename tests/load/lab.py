@@ -16,6 +16,7 @@ import signal
 import sqlite3
 import subprocess as sp
 import time
+import threading
 import urllib.request
 
 OUT = Path('/results')
@@ -53,6 +54,8 @@ def main():
     args.add_argument('--clients', type=int, default=100000)
     args.add_argument('--profile', action='store_true')
     args.add_argument('--case', action='append', help='run named mode-kind-rate scenario; may be repeated')
+    args.add_argument('--diagnostics', action='store_true')
+    args.add_argument('--trace', action='store_true')
     opts = args.parse_args()
     OUT.mkdir(exist_ok=True)
     (OUT/'report.json').unlink(missing_ok=True)
@@ -126,30 +129,49 @@ subnets:
         cases = [case for case in cases if '-'.join(map(str, case)) in opts.case]
         if not cases:
             raise ValueError('unknown --case')
-    report = {'profile_enabled':opts.profile, 'kernel':run('uname','-a'),'version':run('godhcp','version'), 'cpu_limit':'4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1', 'cpu_model':Path('/proc/cpuinfo').read_text(), 'memory_limit_bytes':Path('/sys/fs/cgroup/memory.max').read_text().strip(), 'duration_seconds':opts.seconds,'seeded_bound_leases':opts.clients,'sqlite_pragmas':['journal_mode=WAL','synchronous=NORMAL'], 'logging':'error','ping_check':False,'scope':'UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak','results':[]}
+    report = {'profile_enabled':opts.profile, 'trace_enabled':opts.trace, 'diagnostics_enabled':opts.diagnostics, 'kernel':run('uname','-a'),'version':run('godhcp','version'), 'cpu_limit':'4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1', 'cpu_model':Path('/proc/cpuinfo').read_text(), 'memory_limit_bytes':Path('/sys/fs/cgroup/memory.max').read_text().strip(), 'duration_seconds':opts.seconds,'seeded_bound_leases':opts.clients,'sqlite_pragmas':['journal_mode=WAL','synchronous=NORMAL'], 'logging':'error','ping_check':False,'scope':'UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak','results':[]}
     for mode,kind,rate in cases:
         name = f'{mode}-{kind}-{rate}'
         for p in OUT.glob('leases.db*'):
             p.unlink()
         (OUT/'leases.db').write_bytes(baseline)
         with (OUT/(name+'.log')).open('w') as log:
-            server = sp.Popen(['godhcp','-config',str(OUT/'config.yml')],stdout=log,stderr=log,env={**os.environ,'GOMAXPROCS':'4','GODHCP_LOAD_PROFILE':'1' if opts.profile else '0'})
+            server = sp.Popen(['godhcp','-config',str(OUT/'config.yml')],stdout=log,stderr=log,env={**os.environ,'GOMAXPROCS':'4','GODHCP_LOAD_PROFILE':'1' if opts.profile or opts.trace else '0','GODEBUG':'gctrace=1' if opts.diagnostics else '', 'GODHCP_COMMIT_LOG':str(OUT/(name+'.commits.jsonl')) if opts.diagnostics else ''})
             try:
                 wait_ready(server)
                 profile_pool = None
                 profile_future = None
-                if opts.profile:
+                if opts.profile or opts.trace:
                     def capture_profile():
-                        with urllib.request.urlopen('http://127.0.0.1:6060/debug/pprof/profile?seconds='+str(opts.seconds),timeout=opts.seconds+20) as response:
-                            (OUT/(name+'.cpu.pprof')).write_bytes(response.read())
+                        endpoint = 'trace' if opts.trace else 'profile'
+                        suffix = '.trace' if opts.trace else '.cpu.pprof'
+                        with urllib.request.urlopen('http://127.0.0.1:6060/debug/pprof/'+endpoint+'?seconds='+str(opts.seconds),timeout=opts.seconds+20) as response:
+                            (OUT/(name+suffix)).write_bytes(response.read())
                     profile_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
                     profile_future = profile_pool.submit(capture_profile)
                     time.sleep(.2)
-                before = run('cat',f'/proc/{server.pid}/stat')
-                raw = sp.check_output(['ip','netns','exec','clients','env','GOMAXPROCS=1','godhcp-load','-mode',mode,'-kind',kind,'-rate',str(rate),'-seconds',str(opts.seconds),'-clients',str(opts.clients)],text=True,timeout=opts.seconds+40)
-                if profile_future is not None:
-                    profile_future.result()
-                    profile_pool.shutdown()
+                monitor_stop = threading.Event()
+                monitor_samples = []
+                def monitor():
+                    while not monitor_stop.is_set():
+                        monitor_samples.append({'unix_ns':time.time_ns(),'cpu_stat':Path('/sys/fs/cgroup/cpu.stat').read_text(), 'wal_bytes':(OUT/'leases.db-wal').stat().st_size if (OUT/'leases.db-wal').exists() else 0})
+                        monitor_stop.wait(.02)
+                monitor_thread = None
+                if opts.diagnostics:
+                    monitor_thread = threading.Thread(target=monitor,daemon=True)
+                    monitor_thread.start()
+                try:
+                    before = run('cat',f'/proc/{server.pid}/stat')
+                    raw = sp.check_output(['ip','netns','exec','clients','env','GOMAXPROCS=1','godhcp-load','-mode',mode,'-kind',kind,'-rate',str(rate),'-seconds',str(opts.seconds),'-clients',str(opts.clients)],text=True,timeout=opts.seconds+40)
+                    if profile_future is not None:
+                        profile_future.result()
+                finally:
+                    monitor_stop.set()
+                    if monitor_thread is not None:
+                        monitor_thread.join()
+                        (OUT/(name+'.monitor.json')).write_text(json.dumps(monitor_samples))
+                    if profile_pool is not None:
+                        profile_pool.shutdown()
                 result = json.loads(raw)
                 after = run('cat',f'/proc/{server.pid}/stat')
                 # /proc comm can contain spaces; fields following final ')' start at field 3.

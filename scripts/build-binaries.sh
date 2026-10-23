@@ -5,8 +5,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 version=$(awk -F '"' '/Version = / {print $2}' internal/version/version.go)
 test -n "$version"
+test -f docs/godhcp-web-guide.pdf || {
+  echo "Generate docs/godhcp-web-guide.pdf first (see docs/building.md)." >&2
+  exit 1
+}
 release_dir="dist/releases/$version"
 mkdir -p "$release_dir"
+cp docs/godhcp-web-guide.pdf "$release_dir/"
 for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/arm64; do
   target_os=${target%/*}
   target_arch=${target#*/}
@@ -19,7 +24,7 @@ for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/
   trap 'rm -rf "$stage_dir"' EXIT
   cp "$release_dir/$binary" "$stage_dir/godhcp"
   cp LICENSE NOTICE THIRD_PARTY_LICENSES README.md "$stage_dir/"
-  cp -R third_party "$stage_dir/"
+  cp -R third_party docs "$stage_dir/"
   mkdir -p "$stage_dir/configs"
   cp configs/example.yml configs/dev.yml "$stage_dir/configs/"
   tar -czf "$release_dir/$binary.tar.gz" -C "$stage_dir" .
@@ -35,5 +40,7 @@ with (directory / 'SHA256SUMS').open('w') as output:
         for suffix in ('', '.tar.gz'):
             path = directory / f'godhcp_{version}_{target}{suffix}'
             output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
+    path = directory / 'godhcp-web-guide.pdf'
+    output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
 print(directory.resolve())
 PY

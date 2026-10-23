@@ -153,8 +153,8 @@ func (l *Listener) Serve(ctx context.Context, svc *core.Service, log *slog.Logge
 			}
 			iface := ""
 			if d.cm != nil && d.cm.IfIndex != 0 {
-				if ifi, err := net.InterfaceByIndex(d.cm.IfIndex); err == nil {
-					iface = ifi.Name
+				if name, err := interfaceName(conn, d.cm.IfIndex); err == nil {
+					iface = name
 				}
 			}
 			inputs = append(inputs, core.Input{Packet: pkt, Iface: iface})

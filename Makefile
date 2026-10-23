@@ -1,7 +1,7 @@
 # Copyright 2026 Кислов Роман Сергеевич
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build test cover docker tidy release packages binaries test-dhcp-docker test-systemd-vm test-load-docker
+.PHONY: build test cover docker tidy release packages web-guide-pdf binaries test-dhcp-docker test-systemd-vm test-load-docker
 .DEFAULT_GOAL := build
 
 test-load-docker:
@@ -15,6 +15,10 @@ test-dhcp-docker:
 
 packages:
 	bash scripts/build-packages.sh
+
+web-guide-pdf:
+	python3 scripts/build-web-guide-pdf.py
+	cp output/pdf/godhcp-web-guide.pdf docs/godhcp-web-guide.pdf
 
 binaries:
 	bash scripts/build-binaries.sh
