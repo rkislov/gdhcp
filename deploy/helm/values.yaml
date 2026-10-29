@@ -9,7 +9,7 @@ image:
 configPath: /etc/godhcp/config.yml
 
 service:
-  apiPort: 8080
+  apiPort: 8181
   metricsPort: 9090
 
 hostNetwork: true
@@ -26,7 +26,7 @@ config: |
     driver: sqlite
     dsn: /var/lib/godhcp/leases.db
   api:
-    listen: ":8080"
+    listen: ":8181"
     auth:
       jwt_secret: "${JWT_SECRET:-replace-this-secret-32bytes-min}"
   web:

@@ -18,7 +18,7 @@ database:
   dsn: data/leases.db
 
 api:
-  listen: ":8080"
+  listen: ":8181"
   rate_limit: 100
   auth:
     jwt_secret: "${JWT_SECRET:-dev-insecure-change-me-32b}"

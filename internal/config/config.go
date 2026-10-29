@@ -349,7 +349,7 @@ func (c *Config) ApplyDefaults() {
 		c.Database.DSN = "/var/lib/godhcp/leases.db"
 	}
 	if c.API.Listen == "" {
-		c.API.Listen = ":8080"
+		c.API.Listen = ":8181"
 	}
 	if c.API.Auth.TokenTTL == 0 {
 		c.API.Auth.TokenTTL = time.Hour

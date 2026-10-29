@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-26",
+  "verdict": "Increasing SQLite page cache alone has not established elimination of latency spikes",
+  "cache32_direct": {
+    "p99_ms": 1.528949,
+    "max_ms": 8.793565,
+    "replies_ge_20ms": 0,
+    "valid_replies": 600000
+  },
+  "cache2_direct_control": {
+    "p99_ms": 1.728293,
+    "max_ms": 58.430717,
+    "replies_ge_20ms": 709,
+    "valid_replies": 600000
+  },
+  "cache32_relay": {
+    "p99_ms": 10.8522,
+    "max_ms": 295.708159,
+    "replies_ge_20ms": 9517,
+    "valid_replies": 1200000
+  },
+  "observed_storage_trace": {
+    "source": "output/dhcp-spike-flight-only/direct-renew-5000.flight.trace",
+    "no_strace": true,
+    "commit_ms": 48.462912,
+    "pwrite_syscall_interval_ms": 47.56736,
+    "writer_stack": "modernc.org/libc.Xpwrite -> SQLite WAL write"
+  },
+  "store_go_sha256": "48e2a9b4d54e0f0ed11bb0bfa6b301cec2859d250a33f1c3ae7aae148313f118",
+  "scope": "SQLite-backed UDP renewals, shared 4 vCPU, 2 GiB, 100000 leases; no DORA or 24-hour acceptance claim",
+  "validation": {
+    "go_toolchain": "go1.26.0",
+    "race_tests": "passed",
+    "loadtest_build_tests": "passed",
+    "go_vet": "passed",
+    "license_check": "passed",
+    "network_checks_passed": 21,
+    "statement_coverage_percent": 70.87
+  }
+}

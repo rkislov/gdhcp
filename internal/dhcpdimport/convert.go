@@ -55,7 +55,7 @@ func Convert(doc *Document) (*config.Config, error) {
 			DSN:    "/var/lib/godhcp/leases.db",
 		},
 		API: config.API{
-			Listen: ":8080",
+			Listen: ":8181",
 			Auth: config.Auth{
 				JWTSecret: "${JWT_SECRET:-change-me-after-import-32bytes}",
 				TokenTTL:  time.Hour,

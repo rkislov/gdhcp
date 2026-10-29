@@ -56,8 +56,16 @@ def main():
     args.add_argument('--case', action='append', help='run named mode-kind-rate scenario; may be repeated')
     args.add_argument('--diagnostics', action='store_true')
     args.add_argument('--trace', action='store_true')
+    args.add_argument('--flight', action='store_true', help='capture runtime trace around first storage operation >=20ms')
+    args.add_argument('--io-trace', action='store_true', help='diagnostic fsync/fdatasync strace; not an acceptance run')
+    args.add_argument('--storage', choices=['host','native'], default='host', help='SQLite on host bind mount or native Linux container disk')
     opts = args.parse_args()
+    if opts.flight:
+        opts.diagnostics = True
     OUT.mkdir(exist_ok=True)
+    db_dir = OUT if opts.storage=='host' else Path('/var/lib/godhcp-load')
+    db_dir.mkdir(parents=True,exist_ok=True)
+    db_path = db_dir/'leases.db'
     (OUT/'report.json').unlink(missing_ok=True)
     for cmd in [
         ('ip','netns','add','clients'),
@@ -106,8 +114,9 @@ subnets:
     gateway: 198.18.0.1
     vlan: 100
 '''
+    config = config.replace('/results/leases.db', str(db_path))
     (OUT/'config.yml').write_text(config)
-    for p in OUT.glob('leases.db*'):
+    for p in db_dir.glob('leases.db*'):
         p.unlink()
     with (OUT/'seed.log').open('w') as log:
         server = sp.Popen(['godhcp','-config',str(OUT/'config.yml')],stdout=log,stderr=log,env={**os.environ,'GOMAXPROCS':'4'})
@@ -116,27 +125,33 @@ subnets:
         finally:
             stop(server)
     now = time.time()
-    with sqlite3.connect(OUT/'leases.db') as db:
+    with sqlite3.connect(db_path) as db:
         def seed_rows():
             for i in range(opts.clients):
                 ip = str(ipaddress.IPv4Address(int(ipaddress.IPv4Address('198.18.0.10'))+i))
                 mac = f'02:00:00:{i>>16:02x}:{(i>>8)&255:02x}:{i&255:02x}'
                 yield (ip,mac,'load',100,'bound',time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(now+7200)),time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(now)))
         db.executemany('INSERT INTO leases(ip,mac,subnet_id,vlan_id,state,expires_at,created_at) VALUES(?,?,?,?,?,?,?)', seed_rows())
-    baseline = (OUT/'leases.db').read_bytes()
+    db.close()
+    baseline = db_path.read_bytes()
     cases = [('direct','renew',100),('direct','renew',5000),('relay','renew',100),('relay','renew',10000),('direct','inform',5000),('relay','inform',10000)]
     if opts.case:
         cases = [case for case in cases if '-'.join(map(str, case)) in opts.case]
         if not cases:
             raise ValueError('unknown --case')
-    report = {'profile_enabled':opts.profile, 'trace_enabled':opts.trace, 'diagnostics_enabled':opts.diagnostics, 'kernel':run('uname','-a'),'version':run('godhcp','version'), 'cpu_limit':'4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1', 'cpu_model':Path('/proc/cpuinfo').read_text(), 'memory_limit_bytes':Path('/sys/fs/cgroup/memory.max').read_text().strip(), 'duration_seconds':opts.seconds,'seeded_bound_leases':opts.clients,'sqlite_pragmas':['journal_mode=WAL','synchronous=NORMAL'], 'logging':'error','ping_check':False,'scope':'UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak','results':[]}
+    report = {'database_path':str(db_path), 'database_filesystem':run('stat','-f','-c','%T',str(db_dir)), 'storage':opts.storage, 'io_trace_enabled':opts.io_trace, 'flight_enabled':opts.flight, 'profile_enabled':opts.profile, 'trace_enabled':opts.trace, 'diagnostics_enabled':opts.diagnostics, 'kernel':run('uname','-a'),'version':run('godhcp','version'), 'cpu_limit':'4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1', 'cpu_model':Path('/proc/cpuinfo').read_text(), 'memory_limit_bytes':Path('/sys/fs/cgroup/memory.max').read_text().strip(), 'duration_seconds':opts.seconds,'seeded_bound_leases':opts.clients,'sqlite_pragmas':['journal_mode=WAL','synchronous=NORMAL'], 'logging':'error','ping_check':False,'scope':'UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak','results':[]}
     for mode,kind,rate in cases:
         name = f'{mode}-{kind}-{rate}'
-        for p in OUT.glob('leases.db*'):
+        for artifact in [OUT/(name+'.flight.trace'), *OUT.glob(name+'.io.*')]:
+            artifact.unlink(missing_ok=True)
+        for p in db_dir.glob('leases.db*'):
             p.unlink()
-        (OUT/'leases.db').write_bytes(baseline)
+        db_path.write_bytes(baseline)
         with (OUT/(name+'.log')).open('w') as log:
-            server = sp.Popen(['godhcp','-config',str(OUT/'config.yml')],stdout=log,stderr=log,env={**os.environ,'GOMAXPROCS':'4','GODHCP_LOAD_PROFILE':'1' if opts.profile or opts.trace else '0','GODEBUG':'gctrace=1' if opts.diagnostics else '', 'GODHCP_COMMIT_LOG':str(OUT/(name+'.commits.jsonl')) if opts.diagnostics else ''})
+            command = ['godhcp','-config',str(OUT/'config.yml')]
+            if opts.io_trace:
+                command = ['strace','--seccomp-bpf','-D','-ff','-ttt','-T','-y','-e','trace=fsync,fdatasync,pwrite64','-o',str(OUT/(name+'.io'))] + command
+            server = sp.Popen(command,stdout=log,stderr=log,env={**os.environ,'GOMAXPROCS':'4','GODHCP_LOAD_PROFILE':'1' if opts.profile or opts.trace else '0','GODHCP_FLIGHT_TRACE':str(OUT/(name+'.flight.trace')) if opts.flight else '', 'GODEBUG':'gctrace=1' if opts.diagnostics else '', 'GODHCP_COMMIT_LOG':str(OUT/(name+'.commits.jsonl')) if opts.diagnostics else ''})
             try:
                 wait_ready(server)
                 profile_pool = None
@@ -154,7 +169,7 @@ subnets:
                 monitor_samples = []
                 def monitor():
                     while not monitor_stop.is_set():
-                        monitor_samples.append({'unix_ns':time.time_ns(),'cpu_stat':Path('/sys/fs/cgroup/cpu.stat').read_text(), 'wal_bytes':(OUT/'leases.db-wal').stat().st_size if (OUT/'leases.db-wal').exists() else 0})
+                        monitor_samples.append({'unix_ns':time.time_ns(),'cpu_stat':Path('/sys/fs/cgroup/cpu.stat').read_text(), 'wal_bytes':Path(str(db_path)+'-wal').stat().st_size if Path(str(db_path)+'-wal').exists() else 0})
                         monitor_stop.wait(.02)
                 monitor_thread = None
                 if opts.diagnostics:
@@ -162,7 +177,8 @@ subnets:
                     monitor_thread.start()
                 try:
                     before = run('cat',f'/proc/{server.pid}/stat')
-                    raw = sp.check_output(['ip','netns','exec','clients','env','GOMAXPROCS=1','godhcp-load','-mode',mode,'-kind',kind,'-rate',str(rate),'-seconds',str(opts.seconds),'-clients',str(opts.clients)],text=True,timeout=opts.seconds+40)
+                    with (OUT/(name+'.generator.log')).open('w') as generator_log:
+                        raw = sp.check_output(['ip','netns','exec','clients','env','GOMAXPROCS=1','GODEBUG=gctrace=1' if opts.diagnostics else 'GODEBUG=','godhcp-load','-mode',mode,'-kind',kind,'-rate',str(rate),'-seconds',str(opts.seconds),'-clients',str(opts.clients)],stderr=generator_log,text=True,timeout=opts.seconds+40)
                     if profile_future is not None:
                         profile_future.result()
                 finally:
@@ -178,7 +194,7 @@ subnets:
                 a,b = before.rsplit(')',1)[1].split(),after.rsplit(')',1)[1].split()
                 result['server_cpu_seconds'] = (int(b[11])+int(b[12])-int(a[11])-int(a[12]))/os.sysconf('SC_CLK_TCK')
                 result['server_status'] = Path(f'/proc/{server.pid}/status').read_text()
-                db = sqlite3.connect(OUT/'leases.db')
+                db = sqlite3.connect(db_path)
                 rows = db.execute('SELECT count(*),count(distinct ip),count(distinct mac) FROM leases').fetchone()
                 result['sqlite_integrity_check'] = db.execute('PRAGMA integrity_check').fetchone()[0]
                 updated = 0
@@ -207,6 +223,8 @@ subnets:
                 print(name, 'valid=',result['valid_replies'],'unanswered=',result['unanswered'],'p95_ms=',round(result['latency_ms']['p95'],2),'target_met=',result['target_met'],flush=True)
             finally:
                 stop(server)
+                if db_path != OUT/'leases.db':
+                    (OUT/'leases.db').write_bytes(db_path.read_bytes())
     print('Report:',OUT/'report.json',flush=True)
 
 if __name__=='__main__':

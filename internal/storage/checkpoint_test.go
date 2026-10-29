@@ -37,6 +37,9 @@ func TestCheckpointLifecycleAndPersistence(t *testing.T) {
 	var threshold int
 	require.NoError(t, s.db.QueryRow("PRAGMA wal_autocheckpoint").Scan(&threshold))
 	require.Equal(t, 16384, threshold)
+	var cacheKB int
+	require.NoError(t, s.db.QueryRow("PRAGMA cache_size").Scan(&cacheKB))
+	require.Equal(t, -32768, cacheKB)
 	lease := model.Lease{IP: "192.0.2.10", MAC: "02:00:00:00:00:10", State: model.StateBound, ExpiresAt: time.Now().UTC().Add(time.Hour)}
 	require.NoError(t, s.UpsertLease(ctx, lease))
 	// Background checkpoints must not require another lease write to make progress.
@@ -68,4 +71,31 @@ func TestCheckpointHonorsCustomPragmasAndMemory(t *testing.T) {
 		require.Nil(t, s.(*SQLStore).checkpointDB)
 		require.NoError(t, s.Close())
 	}
+}
+
+// The pragma is connection-local. Renewing a database/sql connection must not
+// silently restore the small SQLite default cache under sustained traffic.
+func TestLeaseCacheSurvivesConnectionRotation(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, "sqlite", filepath.Join(t.TempDir(), "rotate.db"))
+	require.NoError(t, err)
+	defer store.Close()
+	s := store.(*SQLStore)
+	s.db.SetConnMaxLifetime(time.Nanosecond)
+	for range 3 {
+		var size int
+		require.NoError(t, s.db.QueryRowContext(ctx, "PRAGMA cache_size").Scan(&size))
+		require.Equal(t, -32768, size)
+	}
+}
+
+func TestCustomLeaseCacheIsPreserved(t *testing.T) {
+	store, err := Open(context.Background(), "sqlite", "file:"+filepath.Join(t.TempDir(), "custom-cache.db")+"?_pragma=journal_mode(WAL)&_pragma=cache_size(-1024)")
+	require.NoError(t, err)
+	defer store.Close()
+	s := store.(*SQLStore)
+	var size int
+	require.NoError(t, s.db.QueryRow("PRAGMA cache_size").Scan(&size))
+	require.Equal(t, -1024, size)
+	require.Nil(t, s.checkpointDB)
 }

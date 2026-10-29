@@ -19,7 +19,7 @@ database:
   dsn: /var/lib/godhcp/pxe.db
 
 api:
-  listen: ":8080"
+  listen: ":8181"
   auth:
     jwt_secret: "${JWT_SECRET}"
 

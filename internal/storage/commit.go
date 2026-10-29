@@ -16,6 +16,14 @@
 
 package storage
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 func commitLeaseTx(tx *sql.Tx) error { return tx.Commit() }
+
+func checkpointLeaseWAL(ctx context.Context, db *sql.DB) error {
+	var busy, frames, copied int
+	return db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)").Scan(&busy, &frames, &copied)
+}

@@ -15,7 +15,7 @@ database:
   dsn: "postgres://godhcp:godhcp@127.0.0.1:5432/godhcp?sslmode=disable"
 
 api:
-  listen: ":8080"
+  listen: ":8181"
   auth:
     jwt_secret: "${JWT_SECRET}"
 

@@ -13,9 +13,9 @@ make build
 sudo ./bin/godhcp -config configs/dev.yml
 ```
 
-- API: <http://127.0.0.1:8080>
-- Интерфейс: <http://127.0.0.1:8080/ui/>
-- Swagger: <http://127.0.0.1:8080/swagger>
+- API: <http://127.0.0.1:8181>
+- Интерфейс: <http://127.0.0.1:8181/ui/>
+- Swagger: <http://127.0.0.1:8181/swagger>
 - Метрики: <http://127.0.0.1:9090>
 - В `configs/dev.yml` пользователь `admin`, пароль `changeme`.
 
@@ -104,3 +104,5 @@ Apache License, Version 2.0. Copyright 2026 Кислов Роман Сергее
 Результаты проверки PCP и нагрузки DHCP/relay: [docs/performance.md](docs/performance.md).
 
 [Пошаговая инструкция по веб-интерфейсу для начинающих администраторов](docs/web-guide.md) и [PDF со скриншотами](docs/godhcp-web-guide.pdf).
+
+Пакет для ALT Linux p10 x86_64 и порядок установки: [инструкция](docs/altlinux-p10.md).

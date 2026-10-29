@@ -22,7 +22,7 @@ config: |
     driver: sqlite
     dsn: /var/lib/godhcp/leases.db
   api:
-    listen: ":8080"
+    listen: ":8181"
     auth:
       jwt_secret: "${JWT_SECRET}"
       users:

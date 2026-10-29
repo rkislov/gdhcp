@@ -1,0 +1,78 @@
+{
+  "database_path": "/results/leases.db",
+  "database_filesystem": "fuseblk",
+  "storage": "host",
+  "io_trace_enabled": false,
+  "flight_enabled": false,
+  "profile_enabled": false,
+  "trace_enabled": false,
+  "diagnostics_enabled": false,
+  "kernel": "Linux 54b1efd9b4f8 7.0.14-linuxkit #1 SMP PREEMPT Sun Sep 20 16:14:09 UTC 2026 aarch64 GNU/Linux",
+  "version": "godhcp 0.1.5\nCopyright 2026 Кислов Роман Сергеевич\nLicense: Apache-2.0",
+  "cpu_limit": "4 shared vCPU, server GOMAXPROCS=4, generator GOMAXPROCS=1",
+  "memory_limit_bytes": "2147483648",
+  "duration_seconds": 120,
+  "seeded_bound_leases": 100000,
+  "sqlite_pragmas": [
+    "journal_mode=WAL",
+    "synchronous=NORMAL"
+  ],
+  "logging": "error",
+  "ping_check": false,
+  "scope": "UDP renewals with SQLite commits and INFORM control; not DORA throughput or 24h soak",
+  "results": [
+    {
+      "actual_rtt_p99_ms": 1.239375,
+      "actual_send_rps": 5000.001529000468,
+      "clients": 100000,
+      "drain_seconds": 5,
+      "duplicate_replies": 0,
+      "elapsed_seconds": 120.010908346,
+      "invalid_replies": 0,
+      "kind": "renew",
+      "latency_ms": {
+        "p50": 0.454094,
+        "p95": 0.981471,
+        "p99": 1.728293
+      },
+      "latency_origin": "scheduled_send",
+      "max_latency_ms": 58.430717,
+      "max_latency_sample": {
+        "latency_ms": 58.430717,
+        "received_unix_ns": 1792992620112298710,
+        "rtt_ms": 44.82825,
+        "scheduled_unix_ns": 1792992620052796048,
+        "sent_unix_ns": 1792992620067470418,
+        "xid": 100401
+      },
+      "mode": "direct",
+      "reply_rps_including_drain": 4999.545526896249,
+      "send_errors": 0,
+      "send_lag_p99_ms": 0.873047,
+      "sending_seconds": 119.999963304,
+      "sent": 600000,
+      "slow_replies_ge_20ms": 709,
+      "target_rps": 5000,
+      "unanswered": 0,
+      "valid_replies": 600000,
+      "server_cpu_seconds": 57.56,
+      "sqlite_integrity_check": "ok",
+      "updated_leases": 100000,
+      "expected_updated_leases_if_all_replied": 100000,
+      "lease_identities_ok": true,
+      "relay_metadata_ok": true,
+      "committed_updates_ok": true,
+      "database_counts": {
+        "leases": 100000,
+        "unique_ip": 100000,
+        "unique_mac": 100000
+      },
+      "database_integrity_ok": true,
+      "target_met": true
+    }
+  ],
+  "server_page_cache_kib": 2000,
+  "source_base_commit": "964af5c4f3a2ec2a712221f6b5473875908fc8ca",
+  "source_state": "working tree; cache2 control uses Go build overlay changing only cache_size",
+  "raw_artifacts": "output/tail-cache2-control-oct26"
+}
