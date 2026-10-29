@@ -12,7 +12,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH="$load_arch" go build -tags loadtest -trimpath -
 cp tests/load/lab.py "$load_context/lab.py"
 cat > "$load_context/Dockerfile" <<'DOCKER'
 FROM debian:12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends iproute2 python3 ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends iproute2 python3 ca-certificates strace && rm -rf /var/lib/apt/lists/*
 COPY godhcp godhcp-load /usr/local/bin/
 COPY lab.py /lab.py
 ENTRYPOINT ["python3", "-u", "/lab.py"]

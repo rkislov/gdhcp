@@ -17,9 +17,11 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
+	"runtime/trace"
 	"time"
 )
 
@@ -40,10 +42,26 @@ func commitLeaseTx(tx *sql.Tx) error {
 		return tx.Commit()
 	}
 	start := time.Now()
+	region := trace.StartRegion(context.Background(), "sqlite.commit")
 	err := tx.Commit()
+	region.End()
 	elapsed := time.Since(start)
+	captureSlowStorage(elapsed)
 	if elapsed >= 5*time.Millisecond {
-		json.NewEncoder(commitLog).Encode(map[string]any{"start_unix_ns": start.UnixNano(), "duration_ns": elapsed.Nanoseconds(), "error": err != nil})
+		json.NewEncoder(commitLog).Encode(map[string]any{"kind": "commit", "start_unix_ns": start.UnixNano(), "duration_ns": elapsed.Nanoseconds(), "error": err != nil})
+	}
+	return err
+}
+
+func checkpointLeaseWAL(ctx context.Context, db *sql.DB) error {
+	start := time.Now()
+	region := trace.StartRegion(ctx, "sqlite.checkpoint")
+	var busy, frames, copied int
+	err := db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)").Scan(&busy, &frames, &copied)
+	region.End()
+	captureSlowStorage(time.Since(start))
+	if commitLog != nil {
+		json.NewEncoder(commitLog).Encode(map[string]any{"kind": "checkpoint", "start_unix_ns": start.UnixNano(), "duration_ns": time.Since(start).Nanoseconds(), "busy": busy, "frames": frames, "copied": copied, "error": err != nil})
 	}
 	return err
 }

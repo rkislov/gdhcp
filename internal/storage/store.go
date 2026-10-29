@@ -120,7 +120,7 @@ func sqliteDSN(dsn string) string {
 	return "file:" + dsn + "?" + sqlitePragmas
 }
 
-const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=wal_autocheckpoint(16384)"
+const sqlitePragmas = "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)&_pragma=wal_autocheckpoint(16384)&_pragma=cache_size(-32768)"
 
 // SQLStore speaks database/sql to SQLite and PostgreSQL.
 type SQLStore struct {

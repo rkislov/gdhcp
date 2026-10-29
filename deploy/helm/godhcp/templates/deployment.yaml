@@ -34,7 +34,7 @@ spec:
               containerPort: 67
               protocol: UDP
             - name: api
-              containerPort: 8080
+              containerPort: 8181
             - name: metrics
               containerPort: 9090
           volumeMounts:

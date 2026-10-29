@@ -49,7 +49,7 @@ func (s *SQLStore) startCheckpoint(ctx context.Context, dsn string) error {
 			case <-maintenance.Done():
 				return
 			case <-ticker.C:
-				_, err := db.ExecContext(maintenance, "PRAGMA wal_checkpoint(PASSIVE)")
+				err := checkpointLeaseWAL(maintenance, db)
 				if err != nil && maintenance.Err() == nil {
 					if !reported {
 						slog.Warn("SQLite background checkpoint failed; automatic checkpoint fallback remains enabled", "err", err)

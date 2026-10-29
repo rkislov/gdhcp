@@ -72,6 +72,7 @@ func main() {
 	var slow []map[string]any
 	var slowCount int
 	var maxLatency float64
+	var maxSample map[string]any
 	var sampleSecond int64
 	var samplesThisSecond int
 	valid, invalid, duplicates, sendErrors := 0, 0, 0, 0
@@ -129,6 +130,7 @@ func main() {
 			rtts = append(rtts, rtt)
 			if latency > maxLatency {
 				maxLatency = latency
+				maxSample = map[string]any{"xid": p.XID, "scheduled_unix_ns": s.sent.UnixNano(), "sent_unix_ns": s.actualSent.UnixNano(), "received_unix_ns": now.UnixNano(), "latency_ms": latency, "rtt_ms": rtt}
 			}
 			if latency >= 20 {
 				slowCount++
@@ -217,6 +219,7 @@ func main() {
 	report["slow_samples"] = slow
 	report["slow_replies_ge_20ms"] = slowCount
 	report["max_latency_ms"] = maxLatency
+	report["max_latency_sample"] = maxSample
 	json.NewEncoder(os.Stdout).Encode(report)
 }
 func clientMAC(id int) net.HardwareAddr {
