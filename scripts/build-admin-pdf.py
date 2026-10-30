@@ -92,7 +92,7 @@ def furniture(canvas, doc):
     canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / Руководство администратора")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
-    canvas.drawString(MARGIN, 23, "Редакция 21 октября 2026 / Linux и systemd")
+    canvas.drawString(MARGIN, 23, "Редакция 30 октября 2026 / Linux и systemd")
     canvas.drawRightString(PAGE_WIDTH - MARGIN, 23, str(doc.page))
     canvas.restoreState()
 
@@ -112,11 +112,15 @@ story = [
 ]
 toc = TableOfContents()
 toc.levelStyles = [
-    ParagraphStyle("TOC0", fontName="Guide", fontSize=9.4, leading=15, textColor=INK, spaceBefore=4),
-    ParagraphStyle("TOC1", fontName="Guide", fontSize=8.4, leading=12, leftIndent=14, textColor=MUTED),
+    ParagraphStyle("TOC0", fontName="Guide", fontSize=9.4, leading=14, textColor=INK, spaceBefore=3),
+    ParagraphStyle("TOC1", fontName="Guide", fontSize=8.4, leading=11, leftIndent=14, textColor=MUTED),
 ]
 story += [toc, PageBreak()]
 source = (ROOT / "docs/admin-guide.md").read_text()
+# Keep the upgrade procedure identical in Markdown and both PDF guides.
+upgrade = (ROOT / "docs/upgrade-v0.1.7.md").read_text().split("\n", 1)[1]
+source = source.replace("<!-- include: upgrade-v0.1.7.md -->",
+                        upgrade.replace("\n## ", "\n### "))
 lines = source.splitlines()
 i = 1  # The title is rendered on the cover.
 heading_count = 0
