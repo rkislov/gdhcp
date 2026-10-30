@@ -19,6 +19,9 @@ docker run --rm --platform linux/amd64 \
  id godhcp
  getent passwd godhcp | grep /sbin/nologin
  test -s /usr/share/doc/godhcp/godhcp-web-guide.pdf
+ test -s /usr/share/doc/godhcp/godhcp-admin-guide.pdf
+ cp /usr/share/doc/godhcp/godhcp-web-guide.pdf /packages/extracted-web.pdf
+ cp /usr/share/doc/godhcp/godhcp-admin-guide.pdf /packages/extracted-admin.pdf
  rpm -V godhcp
  touch /var/lib/godhcp/preserve-test
  rpm -e godhcp

@@ -26,8 +26,6 @@ contents:
   - src: docs/
     dst: /usr/share/doc/godhcp/
     type: tree
-  - src: output/pdf/godhcp-admin-guide.pdf
-    dst: /usr/share/doc/godhcp/admin-guide.pdf
   - src: LICENSE
     dst: /usr/share/licenses/godhcp/LICENSE
   - src: NOTICE

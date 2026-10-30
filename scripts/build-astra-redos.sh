@@ -22,7 +22,6 @@ import sys
 stage=Path(sys.argv[1]);version=sys.argv[2]
 text=(stage/'deploy/nfpm.yaml').read_text()
 # Only tracked documentation is shipped, including the illustrated PDF.
-text=text.replace('  - src: output/pdf/godhcp-admin-guide.pdf\n    dst: /usr/share/doc/godhcp/admin-guide.pdf\n','')
 for key,value in {'PACKAGE_ARCH':'amd64','PACKAGE_VERSION':version,'PACKAGE_BINARY':'godhcp'}.items():text=text.replace('${'+key+'}',value)
 for distro,release in [('astra','1astra'),('redos','1.redos')]:
  (stage/f'nfpm-{distro}.yaml').write_text(text.replace('release: "1"',f'release: "{release}"'))

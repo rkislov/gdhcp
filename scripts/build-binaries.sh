@@ -5,13 +5,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 version=$(awk -F '"' '/Version = / {print $2}' internal/version/version.go)
 test -n "$version"
-test -f docs/godhcp-web-guide.pdf || {
-  echo "Generate docs/godhcp-web-guide.pdf first (see docs/building.md)." >&2
+test -f docs/godhcp-web-guide.pdf && test -f docs/godhcp-admin-guide.pdf || {
+  echo "Generate both PDF guides first (see docs/building.md)." >&2
   exit 1
 }
 release_dir="dist/releases/$version"
 mkdir -p "$release_dir"
-cp docs/godhcp-web-guide.pdf "$release_dir/"
+cp docs/godhcp-web-guide.pdf docs/godhcp-admin-guide.pdf "$release_dir/"
 for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/arm64; do
   target_os=${target%/*}
   target_arch=${target#*/}
@@ -40,7 +40,8 @@ with (directory / 'SHA256SUMS').open('w') as output:
         for suffix in ('', '.tar.gz'):
             path = directory / f'godhcp_{version}_{target}{suffix}'
             output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
-    path = directory / 'godhcp-web-guide.pdf'
-    output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
+    for name in ('godhcp-web-guide.pdf', 'godhcp-admin-guide.pdf'):
+        path = directory / name
+        output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
 print(directory.resolve())
 PY
