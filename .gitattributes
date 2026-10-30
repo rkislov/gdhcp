@@ -1,0 +1,2 @@
+# PDF guides are binary artifacts, not line-oriented text.
+*.pdf binary
