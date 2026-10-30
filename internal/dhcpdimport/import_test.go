@@ -124,3 +124,36 @@ group {
 	require.NoError(t, err)
 	require.Len(t, cfg.Subnets, 3)
 }
+
+func TestClassBeforeFixedReservations(t *testing.T) {
+	for _, declaration := range []string{
+		`class "VLAN116" { match if binary-to-ascii(10, 8, ".", packet(24, 4)) = "10.0.116.254"; }`,
+		`class "VLAN116" { # misleading } brace in comment
+    match if "escaped \" } ;" = "value";
+    if true { log(info, "nested"); }
+  };`,
+	} {
+		t.Run(declaration, func(t *testing.T) {
+			doc, err := Parse(`subnet 10.0.110.0 netmask 255.255.255.0 {}
+` + declaration + `
+shared-network VLAN116 {
+ subnet 10.0.116.0 netmask 255.255.252.0 {
+  option routers 10.0.116.1;
+  range 10.0.119.200 10.0.119.250;
+  host SRV-ZABBIX { hardware ethernet 78:e3:b5:14:dc:7c; fixed-address 10.0.116.10; }
+  host SRV-FOREMAN { hardware ethernet 00:58:3f:29:bb:35; fixed-address 10.0.116.11; }
+ }
+}
+host SC-TEST { hardware ethernet 00:58:3f:29:bc:95; fixed-address 10.0.116.12; }
+`)
+			require.NoError(t, err)
+			require.Len(t, doc.Subnets, 2)
+			cfg, err := Convert(doc)
+			require.NoError(t, err)
+			require.Len(t, cfg.Subnets[1].Reservations, 3)
+			require.Equal(t, "10.0.116.10", cfg.Subnets[1].Reservations[0].IP)
+			require.Equal(t, "10.0.116.1", cfg.Subnets[1].Gateway)
+			require.Contains(t, doc.Warnings, `unsupported statement "class" skipped`)
+		})
+	}
+}
