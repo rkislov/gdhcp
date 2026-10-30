@@ -589,11 +589,20 @@ func (p *parser) expectSemi() {
 func (p *parser) skipToStatementEnd() {
 	depth := 0
 	for p.i < len(p.src) {
+		// Comments and quoted strings cannot open or close a block.
+		p.skip()
+		if p.i >= len(p.src) {
+			return
+		}
 		switch p.src[p.i] {
 		case '"', '\'':
 			q := p.src[p.i]
 			p.i++
 			for p.i < len(p.src) && p.src[p.i] != q {
+				if p.src[p.i] == '\\' && p.i+1 < len(p.src) {
+					p.i += 2
+					continue
+				}
 				p.i++
 			}
 			if p.i < len(p.src) {
@@ -608,6 +617,11 @@ func (p *parser) skipToStatementEnd() {
 			}
 			depth--
 			p.i++
+			if depth == 0 {
+				// Block declarations need no semicolon. Do not consume the next declaration.
+				p.expectSemi()
+				return
+			}
 		case ';':
 			p.i++
 			if depth == 0 {
