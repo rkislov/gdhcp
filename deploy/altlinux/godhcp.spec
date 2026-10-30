@@ -1,7 +1,7 @@
 # Copyright 2026 Roman Kislov
 # SPDX-License-Identifier: Apache-2.0
 Name: godhcp
-%{!?godhcp_version:%define godhcp_version 0.1.7}
+%{!?godhcp_version:%define godhcp_version 0.1.8}
 Version: %{godhcp_version}
 Release: alt1.p10
 Summary: DHCPv4 server with embedded web management

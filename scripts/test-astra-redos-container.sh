@@ -20,6 +20,9 @@ esac
 godhcp version | grep -F "godhcp ${GODHCP_VERSION:?set expected package version}"
 getent passwd godhcp
 test -s /usr/share/doc/godhcp/godhcp-web-guide.pdf
+test -s /usr/share/doc/godhcp/godhcp-admin-guide.pdf
+cp /usr/share/doc/godhcp/godhcp-web-guide.pdf "/packages/verified-$TARGET_NAME-web.pdf"
+cp /usr/share/doc/godhcp/godhcp-admin-guide.pdf "/packages/verified-$TARGET_NAME-admin.pdf"
 systemd-analyze verify /usr/lib/systemd/system/godhcp.service
 cp /usr/bin/godhcp "/packages/verified-binary-$TARGET_NAME"
 printf '# retained configuration\n' > /etc/godhcp/config.yml
