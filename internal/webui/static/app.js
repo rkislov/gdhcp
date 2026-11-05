@@ -1,7 +1,7 @@
 /* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */
 (function () {
   "use strict";
-  const {escapeHTML: esc, csv, state, rank, uptime} = window.GoDHCPUI;
+  const {escapeHTML: esc, csv, state, rank, uptime, normalizeListResponse} = window.GoDHCPUI;
   const $ = (selector, root = document) => root.querySelector(selector);
   const prefix = document.body.dataset.uiPrefix || "/ui";
   const page = document.body.dataset.page;
@@ -49,7 +49,7 @@
       throw new Error(body.error?.message || (response.status === 403 ? "Недостаточно прав для этого действия." : "Ошибка сервера: " + response.status));
     }
     if (response.status === 204) return null;
-    return raw ? response.text() : response.json();
+    return raw ? response.text() : normalizeListResponse(await response.json());
   }
   function showError(error) { if ($("#err")) $("#err").textContent = error?.message || String(error); }
   function toast(message) {
@@ -107,7 +107,7 @@
   async function fillSubnets() {
     const el = $("#subnet-select"); if (!el) return;
     const previous = el.value, {items = []} = await api("/subnets");
-    el.innerHTML = '<option value="">Выберите подсеть</option>' + items.map(s => `<option value="${esc(s.id)}">${esc(s.id)} · ${esc(s.network)}</option>`).join("");
+    el.innerHTML = '<option value="">Выберите подсеть</option>' + items.filter(s => page === "vlans" ? s.can_admin : page === "reservations" ? s.can_operate : true).map(s => `<option value="${esc(s.id)}">${esc(s.id)} · ${esc(s.network)}</option>`).join("");
     el.value = previous;
   }
   function download(content, name, type) {
@@ -120,12 +120,18 @@
     if ($("#connection-text")) $("#connection-text").textContent = ok ? "API доступен" : "Нет связи с API";
   }
   async function authorize() {
-    const status = await api("/status"); principal = {role: status.role || "viewer", username: status.username || "Пользователь"};
-    $("#user-name").textContent = principal.username; $("#user-role").textContent = roles[principal.role] || principal.role;
+    const status = await api("/status"); principal = {...status, role: status.role || "viewer", username: status.username || "Пользователь"};
+    $("#user-name").textContent = principal.username; $("#user-role").textContent = principal.role === "admin" && !principal.global_admin ? "Администратор VLAN" : (roles[principal.role] || principal.role);
     $("#user-initial").textContent = principal.username.charAt(0).toUpperCase(); $("#logout-btn").hidden = !session.access_token;
     document.querySelectorAll("[data-role-min]").forEach(el => { el.hidden = !can(el.dataset.roleMin); }); connected(true);
+    document.querySelectorAll("a.nav-link").forEach(el => {
+      const target = el.getAttribute("href").split("/").pop();
+      if (["users","config"].includes(target) && !principal.global_admin) el.hidden = true;
+      if (["logs","relays"].includes(target) && !principal.global_viewer) el.hidden = true;
+    });
     const min = document.body.dataset.rolePage;
-    if (min && !can(min)) { $("#main").innerHTML = '<h1>Доступ ограничен</h1>' + empty("Нужны права администратора", "Выберите доступный раздел в меню или обратитесь к администратору."); return false; }
+    const globalBlocked = (["users","config"].includes(page) && !principal.global_admin) || (["logs","relays"].includes(page) && !principal.global_viewer);
+    if (globalBlocked || (min && !can(min))) { $("#main").innerHTML = '<h1>Доступ ограничен</h1>' + empty("Нужны права администратора", "Выберите доступный раздел в меню или обратитесь к администратору."); return false; }
     return true;
   }
   function dashboard() {
@@ -150,7 +156,7 @@
       for (const k of ["q", "vlan", "state"]) if (values.get(k)) query.set(k, values.get(k));
       const data = await api("/leases?" + query); rows = data.items; total = data.total;
       if (offset >= total && offset > 0) { offset = Math.max(0, Math.floor(Math.max(0, total - 1) / limit) * limit); return load(); }
-      tableRows("rows", rows.map(l => `<tr><td class="mono font-medium">${esc(l.ip)}</td><td><div class="text-xs">${esc(l.hostname || "Без имени")}</div><div class="mono mt-1 text-slate-400">${esc(l.mac)}</div></td><td>${l.vlan_id ? `<span class="badge">${esc(l.vlan_id)}</span>` : "—"}</td><td class="text-xs text-slate-500">${esc(l.subnet_id)}</td><td class="mono text-slate-500">${esc(l.giaddr || "—")}</td><td>${badge(l.state)}</td><td class="whitespace-nowrap text-xs text-slate-500">${esc(date(l.expires_at))}</td><td>${deleteButton(l.ip, l.ip, "operator")}</td></tr>`).join(""), 8, "Аренды не найдены", "Попробуйте изменить фильтры или дождитесь DHCP-запросов.");
+      tableRows("rows", rows.map(l => `<tr><td class="mono font-medium">${esc(l.ip)}</td><td><div class="text-xs">${esc(l.hostname || "Без имени")}</div><div class="mono mt-1 text-slate-400">${esc(l.mac)}</div></td><td>${l.vlan_id ? `<span class="badge">${esc(l.vlan_id)}</span>` : "—"}</td><td class="text-xs text-slate-500">${esc(l.subnet_id)}</td><td class="mono text-slate-500">${esc(l.giaddr || "—")}</td><td>${badge(l.state)}</td><td class="whitespace-nowrap text-xs text-slate-500">${esc(date(l.expires_at))}</td><td>${l.can_operate ? deleteButton(l.ip, l.ip, "operator") : "—"}</td></tr>`).join(""), 8, "Аренды не найдены", "Попробуйте изменить фильтры или дождитесь DHCP-запросов.");
       count(total); $("#page-range").textContent = total ? `${offset + 1}–${offset + rows.length} из ${total}` : "Нет записей";
       $("#page-number").textContent = Math.floor(offset / limit) + 1; $("#prev-page").disabled = offset === 0; $("#next-page").disabled = offset + limit >= total;
     };
@@ -163,7 +169,7 @@
   function subnetsPage() {
     const load = async () => {
       const {items} = await api("/subnets"); count(items.length);
-      tableRows("rows", items.map(s => `<tr><td class="font-medium">${esc(s.id)}</td><td class="mono">${esc(s.network)}</td><td class="mono text-slate-500">${s.range_start ? esc(s.range_start) + " — " + esc(s.range_end) : "Только резервации"}</td><td class="mono text-slate-500">${esc(s.gateway || "—")}</td><td>${s.vlan_id ? `<span class="badge">${esc(s.vlan_id)}</span>` : "—"}</td><td>${deleteButton(s.id, s.id)}</td></tr>`).join(""), 6);
+      tableRows("rows", items.map(s => `<tr><td class="font-medium">${esc(s.id)}</td><td class="mono">${esc(s.network)}</td><td class="mono text-slate-500">${s.range_start ? esc(s.range_start) + " — " + esc(s.range_end) : "Только резервации"}</td><td class="mono text-slate-500">${esc(s.gateway || "—")}</td><td>${s.vlan_id ? `<span class="badge">${esc(s.vlan_id)}</span>` : "—"}</td><td>${s.can_admin ? deleteButton(s.id, s.id) : "—"}</td></tr>`).join(""), 6);
     };
     form("create", async v => {
       const body = {id: v.get("id").trim(), network: v.get("network").trim(), range: v.get("range").split(",").map(s => s.trim()).filter(Boolean), gateway: v.get("gateway").trim(), dns: v.get("dns").split(",").map(s => s.trim()).filter(Boolean)};
@@ -175,7 +181,7 @@
   function reservationsPage() {
     const load = async () => {
       const [{items}] = await Promise.all([api("/reservations"), fillSubnets()]); count(items.length);
-      tableRows("rows", items.map(r => `<tr><td class="mono font-medium">${esc(r.ip)}</td><td class="mono text-slate-500">${esc(r.mac || r.client_id)}</td><td>${esc(r.hostname || "—")}</td><td class="text-xs text-slate-500">${esc(r.subnet_id)}</td><td>${deleteButton(r.id, r.ip, "operator")}</td></tr>`).join(""), 5);
+      tableRows("rows", items.map(r => `<tr><td class="mono font-medium">${esc(r.ip)}</td><td class="mono text-slate-500">${esc(r.mac || r.client_id)}</td><td>${esc(r.hostname || "—")}</td><td class="text-xs text-slate-500">${esc(r.subnet_id)}</td><td>${r.can_operate ? deleteButton(r.id, r.ip, "operator") : "—"}</td></tr>`).join(""), 5);
     };
     form("create", async v => {
       const body = Object.fromEntries(v); Object.keys(body).forEach(k => { body[k] = body[k].trim(); });
@@ -191,7 +197,7 @@
       const [{items}] = await Promise.all([api("/vlans"), fillSubnets()]); count(items.length);
       tableRows("list", items.map(v => {
         const pct = Math.min(100, Math.max(0, Math.round(v.utilization * 100 || 0)));
-        return `<tr><td><span class="badge badge-info">${esc(v.id)}</span></td><td class="font-medium">${esc(v.name || "—")}</td><td class="mono text-slate-500">${esc(v.interface || "—")}</td><td class="text-xs text-slate-500">${esc(v.subnet_ref || "—")}</td><td class="min-w-44"><div class="mb-2 flex justify-between text-[11px] text-slate-500"><span>${v.pool_used} / ${v.pool_size}</span><span>${pct}%</span></div><div class="progress ${pct >= 80 ? "high" : ""}"><span style="width:${pct}%"></span></div></td><td>${deleteButton(v.id, "VLAN " + v.id)}</td></tr>`;
+        return `<tr><td><span class="badge badge-info">${esc(v.id)}</span></td><td class="font-medium">${esc(v.name || "—")}</td><td class="mono text-slate-500">${esc(v.interface || "—")}</td><td class="text-xs text-slate-500">${esc(v.subnet_ref || "—")}</td><td class="min-w-44"><div class="mb-2 flex justify-between text-[11px] text-slate-500"><span>${v.pool_used} / ${v.pool_size}</span><span>${pct}%</span></div><div class="progress ${pct >= 80 ? "high" : ""}"><span style="width:${pct}%"></span></div></td><td>${v.can_admin ? deleteButton(v.id, "VLAN " + v.id) : "—"}</td></tr>`;
       }).join(""), 6);
     };
     form("create", async v => {
@@ -202,10 +208,17 @@
     bindDelete("list", "/vlans", "Привязка VLAN будет удалена из конфигурации. Проверьте зависимые подсети и клиентов."); return load;
   }
   function relaysPage() {
+    let profiles = [], customParsers = [];
     const load = async () => {
-      const [{items}, parsers] = await Promise.all([api("/relays"), api("/parsers/circuit-id"), fillSubnets()]); count(items.length);
+      const [{items}, parsers, catalog] = await Promise.all([api("/relays"), api("/parsers/circuit-id"), api("/parsers/circuit-id/profiles"), fillSubnets()]); count(items.length);
+      profiles = catalog.items; customParsers = parsers.custom || [];
+      if (!$("#parser-profile").options.length) {
+        $("#parser-profile").innerHTML = profiles.map(p => `<option value="${esc(p.name)}">${esc(p.label)}</option>`).join("");
+        $("#parser-profile").onchange();
+      }
+      $("#parser-rows").innerHTML = customParsers.map(p => `<tr><td>${esc(p.name)}</td><td class="font-mono text-xs">${esc(p.regex)}</td><td><button class="btn" data-edit-parser="${esc(p.name)}">Изменить</button><button class="btn" data-delete-parser="${esc(p.name)}">Удалить</button></td></tr>`).join("") || '<tr><td colspan="3" class="empty-state">Пользовательских парсеров пока нет</td></tr>';
       tableRows("rows", items.map(r => `<tr><td class="mono font-medium">${esc(r.giaddr)}</td><td class="mono text-slate-500">${esc(r.remote_id || "—")}</td><td><span class="badge ${r.trusted ? "badge-success" : "badge-warning"}">${r.trusted ? "Доверенный" : "Обнаружен"}</span></td><td class="text-xs text-slate-500">${esc(r.subnet_id || "—")}</td><td>${r.trusted ? deleteButton(r.giaddr, r.giaddr) : "—"}</td></tr>`).join(""), 5);
-      const selected = $("#parsers").value; $("#parsers").innerHTML = parsers.items.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join("");
+      const selected = $("#parsers").value; $("#parsers").innerHTML = '<option value="">Автоматическое определение</option>' + parsers.items.map(p => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join("");
       if (selected) $("#parsers").value = selected;
     };
     form("create", async v => { await api("/relays", {method: "POST", body: JSON.stringify(Object.fromEntries(v))}); created("Relay добавлен в доверенные"); await load(); });
@@ -213,6 +226,28 @@
       const r = await api("/parsers/circuit-id/test", {method: "POST", body: JSON.stringify(Object.fromEntries(v))});
       $("#out").hidden = false; $("#out").textContent = r.ok ? `Распознано: VLAN ${r.vlan}\nПарсер: ${r.parser}\n\n` + JSON.stringify(r.fields, null, 2) : "Совпадение не найдено. Проверьте Circuit ID и выбранный парсер.";
     });
+    $("#parser-profile").onchange = () => {
+      const p = profiles.find(p => p.name === $("#parser-profile").value); if (!p) return;
+      $("#parser-name").value = p.name === "custom" ? "" : p.name;
+      $("#parser-regex").value = p.regex; $("#parser-example").value = p.example;
+      $("#parser-note").textContent = p.note; $("#parser-result").textContent = "";
+    };
+    $("#parser-preview").onclick = () => busy($("#parser-preview"), async () => {
+      if (!$("#parser-regex").value || !$("#parser-example").value) throw new Error("Введите шаблон и пример Circuit ID.");
+      const r = await api("/parsers/circuit-id/test", {method:"POST", body:JSON.stringify({regex:$("#parser-regex").value, circuit_id:$("#parser-example").value})});
+      $("#parser-result").textContent = r.ok ? `Распознано: VLAN ${r.vlan}` : "Совпадение не найдено. Шаблон не сохранён.";
+    });
+    form("parser-editor", async v => {
+      const name = v.get("name");
+      if (!await confirmAction("Сохранить парсер?", "Он будет участвовать в автоматическом определении VLAN. Совпадающее имя заменит текущий шаблон. Проверьте результат на реальных Circuit ID.", "Сохранить")) return;
+      await api("/parsers/circuit-id", {method:"POST", body:JSON.stringify({name,regex:v.get("regex"),vlan_group:"vlan"})}); toast("Парсер сохранён"); await load();
+    });
+    $("#parser-rows").onclick = e => {
+      const edit = e.target.closest("[data-edit-parser]");
+      if (edit) { const p = customParsers.find(p => p.name === edit.dataset.editParser); $("#parser-name").value = p.name; $("#parser-regex").value = p.regex; $("#parser-note").textContent = "Редактирование сохранённого шаблона"; $("#parser-name").focus(); }
+      const del = e.target.closest("[data-delete-parser]");
+      if (del) busy(del, async () => { if (!await confirmAction("Удалить шаблон?", "Если имя совпадает со встроенным парсером, будет восстановлен встроенный формат.")) return; await api("/parsers/circuit-id/" + encodeURIComponent(del.dataset.deleteParser), {method:"DELETE"}); await load(); });
+    };
     bindDelete("rows", "/relays", "Relay будет удалён из доверенных. Проверьте, что оставшиеся правила доверия соответствуют вашей сети."); return load;
   }
   function configPage() {
@@ -247,13 +282,49 @@
     return load;
   }
   function usersPage() {
-    const descriptions = {admin: "Настройки сервера и управление доступом", operator: "Аренды, резервации и диагностика", viewer: "Просмотр состояния и журналов"};
-    const load = async () => {
-      const {items} = await api("/users"); count(items.length); const admins = items.filter(u => u.role === "admin").length;
-      tableRows("list", items.map(u => `<tr><td><div class="flex items-center gap-3"><span class="flex size-8 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">${esc(u.username.charAt(0).toUpperCase())}</span><span class="font-medium">${esc(u.username)}</span>${u.username === principal.username ? '<span class="badge badge-info">Вы</span>' : ""}</div></td><td><span class="badge">${esc(roles[u.role] || u.role)}</span></td><td class="text-xs text-slate-500">${esc(descriptions[u.role] || "—")}</td><td>${deleteButton(u.username, u.username, "admin", u.role === "admin" && admins === 1)}</td></tr>`).join(""), 4);
+    let users = [], groups = [], editing = "";
+    const uf = $("#create"), gf = $("#group-form"), lf = $("#ldap-form");
+    const field = (f,n) => f.elements.namedItem(n);
+    const selectValues = (el,values) => { for (const o of el.options) o.selected = values.includes(o.value); };
+    const ids = v => {
+      if (v.get("scope") === "global") return [];
+      const values = v.getAll("vlan_ids").map(Number);
+      if (!values.length) throw new Error("Выберите хотя бы один VLAN или область «Весь сервер».");
+      return values;
     };
-    form("create", async v => { await api("/users", {method: "POST", body: JSON.stringify(Object.fromEntries(v))}); created("Пользователь создан"); await load(); });
-    bindDelete("list", "/users", "Учётная запись будет удалена. Ранее выданные JWT продолжают действовать: для срочного отзыва смените секрет сервера."); return load;
+    const scopeText = u => u.vlan_ids?.length ? "VLAN " + u.vlan_ids.join(", ") : "Весь сервер";
+    const fillOptions = (el,values) => { const previous = [...el.selectedOptions].map(o => o.value); el.innerHTML = values; selectValues(el,previous); };
+    const ldapBody = () => { const v = new FormData(lf); return {...Object.fromEntries(v),enabled:field(lf,"enabled").checked,start_tls:field(lf,"start_tls").checked,timeout_seconds:Number(v.get("timeout_seconds") || 5)}; };
+    const load = async () => {
+      const [u,a] = await Promise.all([api("/users"),api("/access")]); users=u.items; groups=a.groups; count(users.length);
+      const options=(a.vlans || []).map(v => `<option value="${v.id}">${v.id} · ${esc(v.name || "VLAN")}</option>`).join("");
+      fillOptions($("#user-vlans"),options); fillOptions($("#group-vlans"),options);
+      fillOptions($("#user-groups"),groups.map(g => `<option value="${esc(g.name)}">${esc(g.name)} · ${esc(roles[g.role])} · ${esc(scopeText(g))}</option>`).join(""));
+      tableRows("list",users.map(u => `<tr><td>${esc(u.username)}</td><td>${esc(roles[u.role] || "Только группы")}</td><td>${u.role ? esc(scopeText(u)) : ""}<br>${esc((u.groups || []).join(", "))}</td><td><button class="btn" data-edit-user="${esc(u.username)}">Изменить</button><button class="btn" data-remove-user="${esc(u.username)}">Удалить</button></td></tr>`).join(""),4);
+      tableRows("group-list",groups.map(g => `<tr><td>${esc(g.name)}</td><td>${esc(roles[g.role])} · ${esc(scopeText(g))}</td><td>${esc(g.ldap_dn || "Локальная")}</td><td><button class="btn" data-edit-group="${esc(g.name)}">Изменить</button><button class="btn" data-remove-group="${esc(g.name)}">Удалить</button></td></tr>`).join(""),4);
+      for (const [name,value] of Object.entries(a.ldap)) { const el=field(lf,name); if (el) { if (el.type === "checkbox") el.checked=!!value; else el.value=value || (name === "timeout_seconds" ? 5 : ""); } }
+      if (!field(lf,"group_attribute").value) field(lf,"group_attribute").value="memberOf";
+    };
+    uf.onreset=()=>{editing="";field(uf,"username").readOnly=false;};
+    form("create",async v=>{
+      const body={username:v.get("username"),password:v.get("password"),role:v.get("role"),vlan_ids:v.get("role") ? ids(v) : [],groups:v.getAll("groups")};
+      await api("/users" + (editing ? "/"+encodeURIComponent(editing) : ""),{method:editing ? "PUT" : "POST",body:JSON.stringify(body)});
+      uf.reset();toast("Права пользователя сохранены");await load();
+    });
+    $("#list").onclick=e=>{
+      const edit=e.target.closest("[data-edit-user]");
+      if(edit){const u=users.find(u=>u.username===edit.dataset.editUser);editing=u.username;field(uf,"username").value=u.username;field(uf,"username").readOnly=true;field(uf,"password").value="";field(uf,"role").value=u.role;field(uf,"scope").value=u.vlan_ids?.length ? "selected":"global";selectValues($("#user-vlans"),(u.vlan_ids || []).map(String));selectValues($("#user-groups"),u.groups || []);uf.scrollIntoView({behavior:"smooth"});}
+      const del=e.target.closest("[data-remove-user]");if(del) busy(del,async()=>{if(!await confirmAction("Удалить пользователя?","Доступ будет прекращён на следующий запрос.")) return;await api("/users/"+encodeURIComponent(del.dataset.removeUser),{method:"DELETE"});await load();});
+    };
+    form("group-form",async v=>{await api("/access/groups",{method:"POST",body:JSON.stringify({name:v.get("name"),role:v.get("role"),ldap_dn:v.get("ldap_dn"),vlan_ids:ids(v)})});gf.reset();toast("Группа сохранена");await load();});
+    $("#group-list").onclick=e=>{
+      const edit=e.target.closest("[data-edit-group]");if(edit){const g=groups.find(g=>g.name===edit.dataset.editGroup);for(const n of ["name","role","ldap_dn"])field(gf,n).value=g[n] || "";field(gf,"scope").value=g.vlan_ids?.length ? "selected":"global";selectValues($("#group-vlans"),(g.vlan_ids || []).map(String));gf.scrollIntoView({behavior:"smooth"});}
+      const del=e.target.closest("[data-remove-group]");if(del)busy(del,async()=>{if(!await confirmAction("Удалить группу?","Сначала снимите эту группу у локальных пользователей."))return;await api("/access/groups/"+encodeURIComponent(del.dataset.removeGroup),{method:"DELETE"});await load();});
+    };
+    $("#directory-kind").onchange=e=>{const kind=e.target.value;if(kind)field(lf,"user_filter").value=kind === "ad" ? "(&(objectClass=user)(sAMAccountName={username}))" : "(&(objectClass=person)(uid={username}))";field(lf,"group_attribute").value="memberOf";};
+    form("ldap-form",async()=>{await api("/access/ldap",{method:"PUT",body:JSON.stringify(ldapBody())});toast("Настройки LDAP сохранены");await load();});
+    $("#ldap-test").onclick=()=>busy($("#ldap-test"),async()=>{const r=await api("/access/ldap/test",{method:"POST",body:JSON.stringify({ldap:ldapBody(),username:$("#ldap-test-user").value})});$("#ldap-result").textContent="Соединение и поиск успешны. Группы:\n"+(r.groups || []).join("\n");});
+    return load;
   }
   function logsPage() {
     let source, records = [], paused = false, reconnecting = false;

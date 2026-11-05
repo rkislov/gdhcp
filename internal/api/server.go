@@ -20,6 +20,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -48,11 +49,12 @@ var specFS embed.FS
 
 // Server is the REST and web frontend.
 type Server struct {
-	svc     *core.Service
-	metrics *metrics.Metrics
-	logs    *logbuf.Buffer
-	started time.Time
-	limit   *limiter
+	mutationMu sync.Mutex
+	svc        *core.Service
+	metrics    *metrics.Metrics
+	logs       *logbuf.Buffer
+	started    time.Time
+	limit      *limiter
 }
 
 func New(svc *core.Service, m *metrics.Metrics, logs *logbuf.Buffer) *Server {
@@ -71,6 +73,7 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/api/v1/auth/login", s.login)
 	r.Post("/api/v1/auth/refresh", s.refresh)
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(s.serializeMutations)
 		r.Use(s.authenticate)
 		r.With(s.allow(auth.RoleViewer)).Get("/status", s.status)
 		r.With(s.allow(auth.RoleViewer)).Get("/metrics", s.metricsHandler)
@@ -99,6 +102,8 @@ func (s *Server) Handler() http.Handler {
 		r.With(s.allow(auth.RoleViewer)).Get("/relays/{giaddr}/stats", s.relayStats)
 		r.With(s.allow(auth.RoleViewer)).Get("/parsers/circuit-id", s.listParsers)
 		r.With(s.allow(auth.RoleAdmin)).Post("/parsers/circuit-id", s.createParser)
+		r.With(s.allow(auth.RoleViewer)).Get("/parsers/circuit-id/profiles", s.parserProfiles)
+		r.With(s.allow(auth.RoleAdmin)).Delete("/parsers/circuit-id/{name}", s.deleteParser)
 		r.With(s.allow(auth.RoleOperator)).Post("/parsers/circuit-id/test", s.testParser)
 		r.With(s.allow(auth.RoleAdmin)).Get("/config", s.getConfig)
 		r.With(s.allow(auth.RoleAdmin)).Put("/config", s.putConfig)
@@ -107,6 +112,12 @@ func (s *Server) Handler() http.Handler {
 		r.With(s.allow(auth.RoleViewer)).Get("/logs/stream", s.streamLogs)
 		r.With(s.allow(auth.RoleAdmin)).Get("/users", s.listUsers)
 		r.With(s.allow(auth.RoleAdmin)).Post("/users", s.createUser)
+		r.With(s.allow(auth.RoleAdmin)).Put("/users/{username}", s.createUser)
+		r.With(s.allow(auth.RoleAdmin)).Get("/access", s.getAccess)
+		r.With(s.allow(auth.RoleAdmin)).Put("/access/ldap", s.putLDAP)
+		r.With(s.allow(auth.RoleAdmin)).Post("/access/ldap/test", s.testLDAP)
+		r.With(s.allow(auth.RoleAdmin)).Post("/access/groups", s.putAccessGroup)
+		r.With(s.allow(auth.RoleAdmin)).Delete("/access/groups/{name}", s.deleteAccessGroup)
 		r.With(s.allow(auth.RoleAdmin)).Delete("/users/{username}", s.deleteUser)
 	})
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -155,18 +166,24 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	principal, _ := principalFrom(r.Context())
 	active := 0
 	for _, st := range s.svc.PoolStats() {
+		if !s.subnetAllowed(principal, st.Subnet, auth.RoleViewer) {
+			continue
+		}
 		active += st.Active
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":        version.Version,
 		"username":       principal.Name,
 		"role":           principal.Role,
+		"grants":         principal.Grants,
+		"global_admin":   principal.Global(auth.RoleAdmin),
+		"global_viewer":  principal.Global(auth.RoleViewer),
 		"author":         version.Author,
 		"authoritative":  cfg.Server.Authoritative,
 		"uptime_seconds": time.Since(s.started).Seconds(),
 		"leases_active":  active,
-		"subnets":        len(cfg.Subnets),
-		"vlans":          len(cfg.VLANs),
+		"subnets":        s.visibleSubnetCount(r),
+		"vlans":          s.visibleVLANCount(r),
 		"database":       cfg.Database.Driver,
 	})
 }
@@ -196,6 +213,8 @@ func (s *Server) listLeases(w http.ResponseWriter, r *http.Request) {
 		}
 		f.VLAN = &n
 	}
+	f.AllowedSubnets = s.allowedSubnets(r)
+	f.AllowedVLANs = s.allowedVLANs(r)
 	items, total, err := s.svc.Store().ListLeases(r.Context(), f)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
@@ -204,7 +223,7 @@ func (s *Server) listLeases(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []model.Lease{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"items": s.leaseViews(r, items), "total": total})
 }
 
 func (s *Server) getLease(w http.ResponseWriter, r *http.Request) {
@@ -263,10 +282,17 @@ func (s *Server) listSubnets(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	visible := make([]model.Subnet, 0, len(items))
+	for _, item := range items {
+		if s.subnetAllowed(caller(r), item.ID, auth.RoleViewer) {
+			visible = append(visible, item)
+		}
+	}
+	items = visible
 	if items == nil {
 		items = []model.Subnet{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, map[string]any{"items": s.subnetViews(r, items)})
 }
 
 func (s *Server) createSubnet(w http.ResponseWriter, r *http.Request) {
@@ -354,10 +380,17 @@ func (s *Server) listReservations(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	visible := make([]model.Reservation, 0, len(items))
+	for _, item := range items {
+		if s.subnetAllowed(caller(r), item.SubnetID, auth.RoleViewer) {
+			visible = append(visible, item)
+		}
+	}
+	items = visible
 	if items == nil {
 		items = []model.Reservation{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, map[string]any{"items": s.reservationViews(r, items)})
 }
 
 func (s *Server) createReservation(w http.ResponseWriter, r *http.Request) {
@@ -422,7 +455,7 @@ func (s *Server) deleteReservation(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) listVLANs(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) listVLANs(w http.ResponseWriter, r *http.Request) {
 	cfg := s.svc.Config()
 	stats := map[string]float64{}
 	used := map[string]int{}
@@ -436,13 +469,17 @@ func (s *Server) listVLANs(w http.ResponseWriter, _ *http.Request) {
 	}
 	type view struct {
 		config.VLAN
+		CanAdmin    bool    `json:"can_admin"`
 		Utilization float64 `json:"utilization"`
 		PoolUsed    int     `json:"pool_used"`
 		PoolSize    int     `json:"pool_size"`
 	}
 	items := make([]view, 0, len(cfg.VLANs))
 	for _, v := range cfg.VLANs {
-		items = append(items, view{VLAN: v, Utilization: stats[v.SubnetRef], PoolUsed: used[v.SubnetRef], PoolSize: size[v.SubnetRef]})
+		if !caller(r).VLAN(v.ID, auth.RoleViewer) || (v.SubnetRef != "" && !s.subnetAllowed(caller(r), v.SubnetRef, auth.RoleViewer)) {
+			continue
+		}
+		items = append(items, view{VLAN: v, CanAdmin: caller(r).VLAN(v.ID, auth.RoleAdmin) && (v.SubnetRef == "" || s.subnetAllowed(caller(r), v.SubnetRef, auth.RoleAdmin)), Utilization: stats[v.SubnetRef], PoolUsed: used[v.SubnetRef], PoolSize: size[v.SubnetRef]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -567,7 +604,7 @@ func (s *Server) vlanLeases(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad_request", "id must be an integer")
 		return
 	}
-	items, total, err := s.svc.Store().ListLeases(r.Context(), model.LeaseFilter{VLAN: &id, Limit: 1000})
+	items, total, err := s.svc.Store().ListLeases(r.Context(), model.LeaseFilter{VLAN: &id, Limit: 1000, AllowedSubnets: s.allowedSubnets(r), AllowedVLANs: s.allowedVLANs(r)})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -575,7 +612,7 @@ func (s *Server) vlanLeases(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []model.Lease{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"items": s.leaseViews(r, items), "total": total})
 }
 
 func (s *Server) vlanStats(w http.ResponseWriter, r *http.Request) {
@@ -697,7 +734,21 @@ func (s *Server) relayStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) listParsers(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.svc.Config()
-	writeJSON(w, http.StatusOK, map[string]any{"items": cfg.Relay.CircuitIDParsers})
+	var custom []relay.Parser
+	for _, p := range cfg.Relay.CircuitIDParsers {
+		compiled, err := relay.Compile(p.Name, p.Regex, p.VLANGroup)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "invalid_config", err.Error())
+			return
+		}
+		custom = append(custom, compiled)
+	}
+	parsers := relay.MergeParsers(custom)
+	items := make([]config.Parser, 0, len(parsers))
+	for _, p := range parsers {
+		items = append(items, config.Parser{Name: p.Name, Regex: p.Pattern, VLANGroup: p.VLANGroup})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "custom": cfg.Relay.CircuitIDParsers})
 }
 
 func (s *Server) createParser(w http.ResponseWriter, r *http.Request) {
@@ -711,7 +762,17 @@ func (s *Server) createParser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	cfg.Relay.CircuitIDParsers = append(cfg.Relay.CircuitIDParsers, body)
+	if _, err := relay.Compile(body.Name, body.Regex, body.VLANGroup); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid_parser", err.Error())
+		return
+	}
+	next := make([]config.Parser, 0, len(cfg.Relay.CircuitIDParsers)+1)
+	for _, p := range cfg.Relay.CircuitIDParsers {
+		if p.Name != body.Name {
+			next = append(next, p)
+		}
+	}
+	cfg.Relay.CircuitIDParsers = append(next, body)
 	if err := s.commit(r.Context(), cfg); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid_config", err.Error())
 		return
@@ -722,6 +783,7 @@ func (s *Server) createParser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) testParser(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Parser    string `json:"parser"`
+		Regex     string `json:"regex"`
 		CircuitID string `json:"circuit_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -738,6 +800,14 @@ func (s *Server) testParser(w http.ResponseWriter, r *http.Request) {
 		custom = append(custom, compiled)
 	}
 	parsers := relay.MergeParsers(custom)
+	if body.Regex != "" {
+		p, err := relay.Compile("preview", body.Regex, "vlan")
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid_parser", err.Error())
+			return
+		}
+		parsers, body.Parser = []relay.Parser{p}, "preview"
+	}
 	vlan, name, fields, ok := relay.MatchVLAN(parsers, body.CircuitID, body.Parser)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": ok, "vlan": vlan, "parser": name, "fields": fields})
 }
@@ -845,40 +915,84 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listUsers(w http.ResponseWriter, _ *http.Request) {
-	users := s.svc.Config().API.Auth.Users
-	out := make([]map[string]string, 0, len(users))
-	for _, u := range users {
-		out = append(out, map[string]string{"username": u.Username, "role": u.Role})
+	out := make([]config.User, 0)
+	for _, u := range s.svc.Config().API.Auth.Users {
+		u.PasswordHash = ""
+		out = append(out, u)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, 200, map[string]any{"items": out})
 }
 
 func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
+		Username string   `json:"username"`
+		Password string   `json:"password"`
+		Role     string   `json:"role"`
+		VLANIDs  []int    `json:"vlan_ids"`
+		Groups   []string `json:"groups"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "bad_request", err.Error())
-		return
-	}
-	hash, err := auth.HashPassword(body.Password)
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		writeErr(w, 400, "bad_request", err.Error())
 		return
 	}
 	cfg, err := cloneConfig(s.svc.Config())
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
+		writeErr(w, 500, "internal", err.Error())
 		return
 	}
-	cfg.API.Auth.Users = append(cfg.API.Auth.Users, config.User{Username: body.Username, PasswordHash: hash, Role: body.Role})
+	index := -1
+	if r.Method == "PUT" {
+		body.Username = chi.URLParam(r, "username")
+	}
+	for i, u := range cfg.API.Auth.Users {
+		if u.Username == body.Username {
+			index = i
+			break
+		}
+	}
+	if r.Method == "POST" && index >= 0 {
+		writeErr(w, 409, "conflict", "user already exists")
+		return
+	}
+	if r.Method == "PUT" && index < 0 {
+		writeErr(w, 404, "not_found", "user not found")
+		return
+	}
+	hash := ""
+	if index >= 0 {
+		hash = cfg.API.Auth.Users[index].PasswordHash
+	}
+	if body.Password != "" || index < 0 {
+		if len(body.Password) < 8 {
+			writeErr(w, 400, "bad_request", "password must contain at least 8 characters")
+			return
+		}
+		hash, err = auth.HashPassword(body.Password)
+		if err != nil {
+			writeErr(w, 500, "internal", err.Error())
+			return
+		}
+	}
+	u := config.User{Username: body.Username, PasswordHash: hash, Role: body.Role, VLANIDs: body.VLANIDs, Groups: body.Groups}
+	if index < 0 {
+		cfg.API.Auth.Users = append(cfg.API.Auth.Users, u)
+	} else {
+		cfg.API.Auth.Users[index] = u
+	}
+	if !hasGlobalAdmin(cfg) {
+		writeErr(w, 409, "conflict", "keep at least one local global administrator")
+		return
+	}
 	if err := s.commit(r.Context(), cfg); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid_config", err.Error())
+		writeErr(w, 400, "invalid_config", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"username": body.Username, "role": body.Role})
+	u.PasswordHash = ""
+	code := 201
+	if r.Method == "PUT" {
+		code = 200
+	}
+	writeJSON(w, code, u)
 }
 
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
@@ -902,6 +1016,10 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg.API.Auth.Users = next
+	if !hasGlobalAdmin(cfg) {
+		writeErr(w, 409, "conflict", "keep at least one local global administrator")
+		return
+	}
 	if err := s.commit(r.Context(), cfg); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid_config", err.Error())
 		return
@@ -926,8 +1044,24 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if user == nil || !auth.VerifyPassword(body.Password, user.PasswordHash) {
-		writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
+	p := auth.Principal{Name: body.Username}
+	if user != nil {
+		if !auth.VerifyPassword(body.Password, user.PasswordHash) {
+			writeErr(w, 401, "unauthorized", "invalid credentials")
+			return
+		}
+	} else {
+		groups, err := auth.Directory(r.Context(), cfg.API.Auth.LDAP, body.Username, &body.Password)
+		if err != nil {
+			writeErr(w, 401, "unauthorized", "invalid credentials or directory unavailable")
+			return
+		}
+		p.Source = "ldap"
+		p.DirectoryGroups = groups
+	}
+	p, valid := s.resolvePrincipal(p)
+	if !valid {
+		writeErr(w, 401, "unauthorized", "no access assigned")
 		return
 	}
 	iss := s.issuer()
@@ -935,7 +1069,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "unauthorized", "jwt secret is not configured")
 		return
 	}
-	tok, err := iss.Issue(user.Username, user.Role)
+	tok, err := iss.IssuePrincipal(p)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -961,7 +1095,20 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid refresh token")
 		return
 	}
-	tok, err := iss.Issue(p.Name, p.Role)
+	if p.Source == "ldap" {
+		groups, err := auth.Directory(r.Context(), s.svc.Config().API.Auth.LDAP, p.Name, nil)
+		if err != nil {
+			writeErr(w, 401, "unauthorized", "directory unavailable")
+			return
+		}
+		p.DirectoryGroups = groups
+	}
+	p, valid := s.resolvePrincipal(p)
+	if !valid {
+		writeErr(w, 401, "unauthorized", "access revoked")
+		return
+	}
+	tok, err := iss.IssuePrincipal(p)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "internal", err.Error())
 		return
@@ -985,14 +1132,14 @@ func (s *Server) ui(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg := s.svc.Config()
-		if len(cfg.API.Auth.Users) == 0 && len(cfg.API.Auth.APIKeys) == 0 {
-			next.ServeHTTP(w, r.WithContext(withPrincipal(r.Context(), auth.Principal{Name: "anonymous", Role: auth.RoleAdmin})))
+		if len(cfg.API.Auth.Users) == 0 && len(cfg.API.Auth.APIKeys) == 0 && !cfg.API.Auth.LDAP.Enabled {
+			writeErr(w, http.StatusUnauthorized, "unauthorized", "authentication is not configured; add an API user or API key")
 			return
 		}
 		if key := r.Header.Get("X-API-Key"); key != "" {
 			for _, k := range cfg.API.Auth.APIKeys {
 				if len(k.Key) == len(key) && subtle.ConstantTimeCompare([]byte(k.Key), []byte(key)) == 1 {
-					next.ServeHTTP(w, r.WithContext(withPrincipal(r.Context(), auth.Principal{Name: k.Name, Role: k.Role})))
+					next.ServeHTTP(w, r.WithContext(withPrincipal(r.Context(), auth.Principal{Name: k.Name, Role: k.Role, Source: "api_key", Grants: []auth.Grant{{Role: k.Role, VLANIDs: k.VLANIDs}}})))
 					return
 				}
 			}
@@ -1012,7 +1159,8 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		p, err := iss.Parse(token, "access")
-		if err != nil {
+		p, valid := s.resolvePrincipal(p)
+		if err != nil || !valid {
 			writeErr(w, http.StatusUnauthorized, "unauthorized", "invalid token")
 			return
 		}
@@ -1024,7 +1172,7 @@ func (s *Server) allow(min string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p, _ := principalFrom(r.Context())
-			if !auth.Allows(p.Role, min) {
+			if !auth.Allows(p.Role, min) || !s.scopeAllowed(r, min) {
 				writeErr(w, http.StatusForbidden, "forbidden", "insufficient role")
 				return
 			}
@@ -1042,11 +1190,15 @@ func (s *Server) issuer() *auth.Issuer {
 }
 
 func (s *Server) commit(ctx context.Context, cfg *config.Config) error {
+	previous := s.svc.Config()
 	if err := s.svc.Apply(ctx, cfg); err != nil {
 		return err
 	}
 	if cfg.Path != "" {
 		if err := config.Save(cfg.Path, cfg); err != nil {
+			if rollbackErr := s.svc.Apply(context.WithoutCancel(ctx), previous); rollbackErr != nil {
+				return fmt.Errorf("save failed: %v; restoring active config failed: %w", err, rollbackErr)
+			}
 			return err
 		}
 	}
@@ -1115,6 +1267,9 @@ func restoreSecrets(next, prev *config.Config) {
 	if next == nil || prev == nil {
 		return
 	}
+	if next.API.Auth.LDAP.BindPassword == "***" {
+		next.API.Auth.LDAP.BindPassword = prev.API.Auth.LDAP.BindPassword
+	}
 	if next.API.Auth.JWTSecret == "***" {
 		next.API.Auth.JWTSecret = prev.API.Auth.JWTSecret
 	}
@@ -1134,6 +1289,9 @@ func redact(cfg *config.Config) *config.Config {
 	out, err := cloneConfig(cfg)
 	if err != nil {
 		return cfg
+	}
+	if out.API.Auth.LDAP.BindPassword != "" {
+		out.API.Auth.LDAP.BindPassword = "***"
 	}
 	if out.API.Auth.JWTSecret != "" {
 		out.API.Auth.JWTSecret = "***"

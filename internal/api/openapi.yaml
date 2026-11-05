@@ -3,7 +3,7 @@
 openapi: 3.1.0
 info:
   title: GoDHCP API
-  version: 0.1.0
+  version: 0.1.9
   license:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
@@ -101,4 +101,20 @@ paths:
     get: {summary: List users, security: [{bearerAuth: []}], responses: {"200": {description: Users}}}
     post: {summary: Create user, security: [{bearerAuth: []}], responses: {"201": {description: Created}}}
   /api/v1/users/{username}:
+    put: {summary: Update user password and per-VLAN grants, security: [{bearerAuth: []}], parameters: [{name: username, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Updated}, "403": {description: Global admin required}}}
     delete: {summary: Delete user, security: [{bearerAuth: []}], parameters: [{name: username, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}
+
+  /api/v1/access:
+    get: {summary: LDAP settings (redacted), groups and configured VLANs, security: [{bearerAuth: []}], responses: {"200": {description: Settings}, "403": {description: Global admin required}}}
+  /api/v1/access/ldap:
+    put: {summary: Save LDAP settings; masked bind_password preserves existing secret, security: [{bearerAuth: []}], responses: {"200": {description: Saved}, "400": {description: Invalid settings}}}
+  /api/v1/access/ldap/test:
+    post: {summary: Test TLS service bind and unique user search without saving, security: [{bearerAuth: []}], responses: {"200": {description: Groups}, "400": {description: Lookup failed}}}
+  /api/v1/access/groups:
+    post: {summary: Create or replace access group, security: [{bearerAuth: []}], responses: {"200": {description: Saved}}}
+  /api/v1/access/groups/{name}:
+    delete: {summary: Delete unreferenced access group, security: [{bearerAuth: []}], parameters: [{name: name, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}
+  /api/v1/parsers/circuit-id/profiles:
+    get: {summary: Vendor format presets and custom profile descriptions, security: [{bearerAuth: []}], responses: {"200": {description: Profiles}}}
+  /api/v1/parsers/circuit-id/{name}:
+    delete: {summary: Delete custom parser override and restore built-in if present, security: [{bearerAuth: []}], parameters: [{name: name, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}

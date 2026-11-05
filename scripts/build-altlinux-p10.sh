@@ -4,8 +4,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if test -n "$(git status --porcelain)"; then
-  echo "Commit source changes before building a release RPM." >&2
-  exit 1
+  if test "${ALLOW_DIRTY_BUILD:-0}" != 1; then
+    echo "Commit source changes before building a release RPM, or set ALLOW_DIRTY_BUILD=1 for an explicitly recorded working-tree build." >&2
+    exit 1
+  fi
+  echo "Building current working tree; build provenance will record vcs.modified=true." >&2
 fi
 package_version=$(awk -F '"' '/Version = / {print $2}' internal/version/version.go)
 stage="$PWD/output/altlinux-p10/$package_version"
@@ -14,6 +17,7 @@ mkdir -p "$stage" "$result"
 payload=$(mktemp -d "$stage/payload.XXXXXX")
 mkdir -p "$payload/usr/bin" "$payload/usr/lib/systemd/system" "$payload/etc/godhcp" "$payload/usr/share/doc/godhcp" "$result"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o "$payload/usr/bin/godhcp" ./cmd/godhcp
+go version -m "$payload/usr/bin/godhcp" > "$result/BUILDINFO.txt"
 cp deploy/systemd/godhcp.service "$payload/usr/lib/systemd/system/"
 cp deploy/package/config.yml.example "$payload/etc/godhcp/"
 cp -R docs/. "$payload/usr/share/doc/godhcp/"

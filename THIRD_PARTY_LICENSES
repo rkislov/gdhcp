@@ -16,6 +16,9 @@ The classifier reports the primary package license, not every embedded work.
 Supplemental LICENSE*, NOTICE*, AUTHORS* and PATENTS* files have been retained,
 including modernc libc/musl, SQLite and sqlite-vec third-party notices.
 
+github.com/Azure/go-ntlmssp: MIT
+github.com/go-asn1-ber/asn1-ber: MIT
+github.com/go-ldap/ldap/v3: MIT
 github.com/beorn7/perks/quantile: MIT
 github.com/cespare/xxhash/v2: MIT
 github.com/dustin/go-humanize: MIT

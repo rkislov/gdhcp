@@ -59,7 +59,9 @@
   .btn-icon { @apply inline-flex size-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800; }
   .btn svg, .btn-icon svg { @apply size-4; }
   .form-grid { @apply grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4; }
-  .form-actions { @apply flex items-end; }
+  .form-actions { @apply flex flex-wrap items-end gap-2; }
+  .checkbox-label { @apply flex-row items-center self-end py-3; }
+  .checkbox-label input { @apply size-4 shrink-0; }
   details > summary { @apply flex list-none items-center justify-between gap-4 px-5 py-4 text-sm font-medium text-slate-800 dark:text-slate-100; }
   details > summary::-webkit-details-marker { display: none; }
   details[open] > summary { @apply border-b border-slate-100 dark:border-slate-800; }

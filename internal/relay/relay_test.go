@@ -137,3 +137,36 @@ func sampleNets() []Network {
 }
 
 func pint(v int) *int { return &v }
+
+func TestDomesticVendorFormatsAndStrictSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+		vlan        int
+	}{
+		{"eltex", "esr01 eth 1/0/1:120", 120},
+		{"eltex", "eth 1/8:4094", 4094},
+		{"qtech", "vlan120+Ethernet1/0/8", 120},
+	} {
+		v, name, _, ok := MatchVLAN(BuiltinParsers(), tc.input, "")
+		require.True(t, ok, tc.input)
+		require.Equal(t, tc.vlan, v)
+		require.Equal(t, tc.name, name)
+	}
+	for _, input := range []string{"eth 1/8:0", "eth 1/8:4095", "eth 1/8:120garbage", "vlan4095+Ethernet1/0/8"} {
+		_, _, _, ok := MatchVLAN(BuiltinParsers(), input, "eltex")
+		require.False(t, ok, input)
+	}
+	_, _, _, ok := MatchVLAN(BuiltinParsers(), "bridge:10", "eltex")
+	require.False(t, ok)
+	_, _, _, ok = MatchVLAN(BuiltinParsers(), "bridge:10", "unknown")
+	require.False(t, ok)
+	for _, profile := range Profiles() {
+		if profile.Pattern == "" {
+			continue
+		}
+		p, err := Compile(profile.Name, profile.Pattern, "vlan")
+		require.NoError(t, err)
+		_, _, ok := p.Parse(profile.Example)
+		require.True(t, ok, profile.Name)
+	}
+}
