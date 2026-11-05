@@ -8,6 +8,8 @@ format=$1
 package=$2
 case "$format" in
   deb)
+    # Minimal Debian images exclude documentation; explicitly exercise our PDFs.
+    printf 'path-include=/usr/share/doc/godhcp\npath-include=/usr/share/doc/godhcp/*\n' > /etc/dpkg/dpkg.cfg.d/zz-godhcp-docs
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package"
     dpkg-deb --contents "$package" > /tmp/package-contents
