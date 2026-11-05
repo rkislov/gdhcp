@@ -11,13 +11,15 @@ case "$format" in
     apt-get update -qq
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$package"
     dpkg-deb --contents "$package" > /tmp/package-contents
-    grep -q /usr/share/doc/godhcp/admin-guide.pdf /tmp/package-contents
+    grep -q /usr/share/doc/godhcp/godhcp-admin-guide.pdf /tmp/package-contents
     ;;
   rpm)
     dnf install -y "$package"
-    test -f /usr/share/doc/godhcp/admin-guide.pdf
+    test -f /usr/share/doc/godhcp/godhcp-admin-guide.pdf
     ;;
 esac
+test -s /usr/share/doc/godhcp/godhcp-admin-guide.pdf
+test -s /usr/share/doc/godhcp/godhcp-web-guide.pdf
 godhcp version
 getent passwd godhcp
 test ! -e /etc/godhcp/config.yml
