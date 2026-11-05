@@ -34,6 +34,7 @@ func BuiltinParsers() []Parser {
 	specs := []struct {
 		name, pattern, group string
 	}{
+		{"eltex", `^(?:[^\x00-\x20]+ )?eth (?P<port>\d+(?:/\d+){1,2}):(?P<vlan>\d+)(?:[\x00-\x1f])?$`, "vlan"},
 		{"cisco", `^(?P<port>[^:]+):vlan(?P<vlan>\d+)$`, "vlan"},
 		{"huawei", `^slot=(?P<slot>\d+);subslot=(?P<sub>\d+);(?P<port>[^;]+);vlanid=(?P<vlan>\d+)$`, "vlan"},
 		{"extreme", `^(?P<slot>\d+):(?P<port>\d+):(?P<vlan>\d+)$`, "vlan"},
@@ -42,6 +43,7 @@ func BuiltinParsers() []Parser {
 		{"aruba", `^(?:port(?P<port>\d+):)?vlan(?P<vlan>\d+)$`, "vlan"},
 		{"hp", `^(?P<port>[^:]+):(?P<vlan>\d+)$`, "vlan"},
 		{"brocade", `^(?P<port>.+)/vlan(?P<vlan>\d+)$`, "vlan"},
+		{"qtech", `^vlan(?P<vlan>\d+)\+Ethernet(?P<port>\d+/\d+/\d+)$`, "vlan"},
 		{"unifi", `^vlan(?P<vlan>\d+)$`, "vlan"},
 	}
 	out := make([]Parser, 0, len(specs))
@@ -129,7 +131,7 @@ func MergeParsers(configured []Parser) []Parser {
 	return out
 }
 
-// MatchVLAN tries parsers in order. If onlyName is set, that parser is tried first.
+// MatchVLAN tries parsers in order, or only the explicitly selected parser.
 func MatchVLAN(parsers []Parser, circuitID, onlyName string) (vlan int, parser string, fields map[string]string, ok bool) {
 	if circuitID == "" {
 		return 0, "", nil, false
@@ -149,6 +151,7 @@ func MatchVLAN(parsers []Parser, circuitID, onlyName string) (vlan int, parser s
 				}
 			}
 		}
+		return 0, "", nil, false
 	}
 	for _, p := range parsers {
 		if onlyName != "" && p.Name == onlyName {

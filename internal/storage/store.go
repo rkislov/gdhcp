@@ -390,6 +390,30 @@ func (s *SQLStore) ListLeases(ctx context.Context, f model.LeaseFilter) ([]model
 func leaseWhere(f model.LeaseFilter) (string, []any) {
 	var parts []string
 	var args []any
+	if f.AllowedSubnets != nil {
+		if len(f.AllowedSubnets) == 0 {
+			parts = append(parts, "1 = 0")
+		} else {
+			placeholders := make([]string, len(f.AllowedSubnets))
+			for i, id := range f.AllowedSubnets {
+				placeholders[i] = "?"
+				args = append(args, id)
+			}
+			parts = append(parts, "subnet_id IN ("+strings.Join(placeholders, ",")+")")
+		}
+	}
+	if f.AllowedVLANs != nil {
+		if len(f.AllowedVLANs) == 0 {
+			parts = append(parts, "vlan_id IS NULL")
+		} else {
+			placeholders := make([]string, len(f.AllowedVLANs))
+			for i, id := range f.AllowedVLANs {
+				placeholders[i] = "?"
+				args = append(args, id)
+			}
+			parts = append(parts, "(vlan_id IS NULL OR vlan_id IN ("+strings.Join(placeholders, ",")+"))")
+		}
+	}
 	if f.VLAN != nil {
 		parts = append(parts, "vlan_id = ?")
 		args = append(args, *f.VLAN)

@@ -98,13 +98,15 @@ type Reservation struct {
 
 // LeaseFilter selects leases for list queries.
 type LeaseFilter struct {
-	VLAN     *int
-	SubnetID string
-	GIAddr   string
-	Query    string
-	State    string
-	Limit    int
-	Offset   int
+	AllowedSubnets []string // nil is unrestricted; empty denies all.
+	AllowedVLANs   []int    // nil is unrestricted; empty permits only untagged leases.
+	VLAN           *int
+	SubnetID       string
+	GIAddr         string
+	Query          string
+	State          string
+	Limit          int
+	Offset         int
 }
 
 // RelayStats is the in-memory counter snapshot exposed by the API.

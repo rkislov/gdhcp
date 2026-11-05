@@ -215,11 +215,11 @@ func TestConfigHTTPRoundTripAndReload(t *testing.T) {
 
 func TestUsersTokensAndPermissions(t *testing.T) {
 	s, h := workflowAPI(t)
-	callAPI(t, h, "POST", "/api/v1/users", `{"username":"alice","password":"secret","role":"operator"}`, 201, "test-admin")
+	callAPI(t, h, "POST", "/api/v1/users", `{"username":"alice","password":"secret123","role":"operator"}`, 201, "test-admin")
 	rec := callAPI(t, h, "GET", "/api/v1/users", "", 200, "test-admin")
 	require.NotContains(t, rec.Body.String(), "argon2")
 	require.Contains(t, rec.Body.String(), "alice")
-	rec = callAPI(t, h, "POST", "/api/v1/auth/login", `{"username":"alice","password":"secret"}`, 200, "")
+	rec = callAPI(t, h, "POST", "/api/v1/auth/login", `{"username":"alice","password":"secret123"}`, 200, "")
 	var tok auth.Tokens
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &tok))
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
@@ -240,7 +240,7 @@ func TestUsersTokensAndPermissions(t *testing.T) {
 	h.ServeHTTP(r, req)
 	require.Equal(t, 401, r.Code)
 	callAPI(t, h, "DELETE", "/api/v1/users/alice", "", 204, "test-admin")
-	callAPI(t, h, "POST", "/api/v1/auth/login", `{"username":"alice","password":"secret"}`, 401, "")
+	callAPI(t, h, "POST", "/api/v1/auth/login", `{"username":"alice","password":"secret123"}`, 401, "")
 	cfg := s.svc.Config()
 	cfg.API.Auth.JWTSecret = ""
 	require.NoError(t, s.svc.Apply(context.Background(), cfg))

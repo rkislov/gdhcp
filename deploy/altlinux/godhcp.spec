@@ -1,4 +1,4 @@
-# Copyright 2026 Roman Kislov
+# Copyright 2026 Kislov Roman Sergeevich; full notice below in %description.
 # SPDX-License-Identifier: Apache-2.0
 Name: godhcp
 %{!?godhcp_version:%define godhcp_version 0.1.8}

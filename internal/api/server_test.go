@@ -114,6 +114,10 @@ func TestHTTP(t *testing.T) {
 }
 
 func newAPI(t *testing.T) http.Handler {
+	return newAPIServer(t).Handler()
+}
+
+func newAPIServer(t *testing.T) *Server {
 	t.Helper()
 	ctx := context.Background()
 	raw := []byte(`
@@ -170,7 +174,7 @@ logging:
 		Store: store, Config: cfg, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	require.NoError(t, err)
-	return New(svc, metrics.New(), logbuf.New(32)).Handler()
+	return New(svc, metrics.New(), logbuf.New(32))
 }
 
 func get(t *testing.T, url, token string) *http.Response {
@@ -200,4 +204,75 @@ func postJSON(t *testing.T, url, token string, body any) *http.Response {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = res.Body.Close() })
 	return res
+}
+
+func TestEmptyAuthenticationNeverGrantsAdmin(t *testing.T) {
+	s := newAPIServer(t)
+	tokens, err := s.issuer().Issue("admin", auth.RoleAdmin)
+	require.NoError(t, err)
+	cfg, err := cloneConfig(s.svc.Config())
+	require.NoError(t, err)
+	cfg.API.Auth.Users = nil
+	cfg.API.Auth.APIKeys = nil
+	require.NoError(t, s.svc.Apply(context.Background(), cfg))
+	handler := s.Handler()
+	for _, path := range []string{"/api/v1/status", "/api/v1/leases", "/api/v1/config", "/api/v1/users"} {
+		for _, token := range []string{"", tokens.AccessToken} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			res := httptest.NewRecorder()
+			handler.ServeHTTP(res, req)
+			require.Equal(t, http.StatusUnauthorized, res.Code, path)
+		}
+	}
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	require.Equal(t, http.StatusOK, res.Code)
+}
+
+func TestParserListContainsEffectiveBuiltinsAndOverrides(t *testing.T) {
+	s := newAPIServer(t)
+	token, err := s.issuer().Issue("admin", auth.RoleAdmin)
+	require.NoError(t, err)
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	load := func() []config.Parser {
+		res := get(t, ts.URL+"/api/v1/parsers/circuit-id", token.AccessToken)
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		var body struct {
+			Items []config.Parser `json:"items"`
+		}
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&body))
+		require.NotNil(t, body.Items)
+		return body.Items
+	}
+	builtins := load()
+	require.NotEmpty(t, builtins)
+	names := map[string]int{}
+	for _, p := range builtins {
+		names[p.Name]++
+	}
+	require.Equal(t, 1, names["cisco"])
+	cfg, err := cloneConfig(s.svc.Config())
+	require.NoError(t, err)
+	cfg.Relay.CircuitIDParsers = []config.Parser{{Name: "cisco", Regex: `^test-(?P<vlan>\d+)$`, VLANGroup: "vlan"}}
+	require.NoError(t, s.svc.Apply(context.Background(), cfg))
+	items := load()
+	require.Len(t, items, len(builtins))
+	for _, p := range items {
+		if p.Name == "cisco" {
+			require.Equal(t, cfg.Relay.CircuitIDParsers[0].Regex, p.Regex)
+		}
+	}
+	res := postJSON(t, ts.URL+"/api/v1/parsers/circuit-id/test", token.AccessToken, map[string]string{"parser": "cisco", "circuit_id": "test-20"})
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	var parsed struct {
+		OK   bool `json:"ok"`
+		VLAN int  `json:"vlan"`
+	}
+	require.NoError(t, json.NewDecoder(res.Body).Decode(&parsed))
+	require.True(t, parsed.OK)
+	require.Equal(t, 20, parsed.VLAN)
 }

@@ -86,6 +86,8 @@ type TLS struct {
 }
 
 type Auth struct {
+	LDAP       LDAP          `yaml:"ldap,omitempty" json:"ldap"`
+	Groups     []AccessGroup `yaml:"groups,omitempty" json:"groups,omitempty"`
 	JWTSecret  string        `yaml:"jwt_secret,omitempty" json:"jwt_secret,omitempty"`
 	TokenTTL   time.Duration `yaml:"token_ttl,omitempty" json:"token_ttl,omitempty"`
 	RefreshTTL time.Duration `yaml:"refresh_ttl,omitempty" json:"refresh_ttl,omitempty"`
@@ -94,15 +96,18 @@ type Auth struct {
 }
 
 type User struct {
-	Username     string `yaml:"username" json:"username"`
-	PasswordHash string `yaml:"password_hash" json:"password_hash,omitempty"`
-	Role         string `yaml:"role" json:"role"`
+	VLANIDs      []int    `yaml:"vlan_ids,omitempty" json:"vlan_ids,omitempty"`
+	Groups       []string `yaml:"groups,omitempty" json:"groups,omitempty"`
+	Username     string   `yaml:"username" json:"username"`
+	PasswordHash string   `yaml:"password_hash" json:"password_hash,omitempty"`
+	Role         string   `yaml:"role" json:"role"`
 }
 
 type APIKey struct {
-	Name string `yaml:"name" json:"name"`
-	Key  string `yaml:"key" json:"key,omitempty"`
-	Role string `yaml:"role" json:"role"`
+	VLANIDs []int  `yaml:"vlan_ids,omitempty" json:"vlan_ids,omitempty"`
+	Name    string `yaml:"name" json:"name"`
+	Key     string `yaml:"key" json:"key,omitempty"`
+	Role    string `yaml:"role" json:"role"`
 }
 
 type Web struct {

@@ -31,17 +31,4 @@ for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/
   rm -rf "$stage_dir"
   trap - EXIT
 done
-python3 - "$release_dir" "$version" <<'PY'
-import hashlib, pathlib, sys
-directory, version = pathlib.Path(sys.argv[1]), sys.argv[2]
-with (directory / 'SHA256SUMS').open('w') as output:
-    targets = ('linux_amd64', 'linux_386', 'linux_armv7', 'linux_arm64', 'darwin_amd64', 'darwin_arm64')
-    for target in targets:
-        for suffix in ('', '.tar.gz'):
-            path = directory / f'godhcp_{version}_{target}{suffix}'
-            output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
-    for name in ('godhcp-web-guide.pdf', 'godhcp-admin-guide.pdf'):
-        path = directory / name
-        output.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
-print(directory.resolve())
-PY
+python3 scripts/write-release-checksums.py "$release_dir"

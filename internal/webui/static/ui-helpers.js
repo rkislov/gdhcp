@@ -18,7 +18,13 @@
     if (n >= 3600) return `${Math.floor(n / 3600)} ч ${Math.floor(n % 3600 / 60)} мин`;
     return `${Math.floor(n / 60)} мин`;
   }
-  const helpers = {escapeHTML, csvCell, csv, state, rank, uptime};
+  function normalizeListResponse(value) {
+    if (value && typeof value === "object" && Object.hasOwn(value, "items") && value.items == null) {
+      return {...value, items: []};
+    }
+    return value;
+  }
+  const helpers = {escapeHTML, csvCell, csv, state, rank, uptime, normalizeListResponse};
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   if (root) {
     root.GoDHCPUI = helpers;

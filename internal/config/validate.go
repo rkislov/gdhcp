@@ -232,9 +232,44 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := ValidateLDAP(c.API.Auth.LDAP); err != nil {
+		add("%s", err)
+	}
+	groups := map[string]struct{}{}
+	validScope := func(name string, ids []int) {
+		seen := map[int]bool{}
+		for _, id := range ids {
+			if id < 1 || id > 4094 || seen[id] {
+				add("%s: VLAN IDs must be unique and in 1..4094", name)
+			}
+			seen[id] = true
+		}
+	}
+	for _, g := range c.API.Auth.Groups {
+		if g.Name == "" {
+			add("access group name is required")
+		}
+		if _, ok := groups[g.Name]; ok {
+			add("duplicate access group %s", g.Name)
+		}
+		groups[g.Name] = struct{}{}
+		if g.Role != "admin" && g.Role != "operator" && g.Role != "viewer" {
+			add("group %s: invalid role", g.Name)
+		}
+		validScope(g.Name, g.VLANIDs)
+		if err := validateGroupDN(g.LDAPDN); err != nil {
+			add("group %s: %s", g.Name, err)
+		}
+	}
 	roles := map[string]struct{}{"admin": {}, "operator": {}, "viewer": {}}
 	users := map[string]struct{}{}
 	for _, u := range c.API.Auth.Users {
+		validScope(u.Username, u.VLANIDs)
+		for _, name := range u.Groups {
+			if _, ok := groups[name]; !ok {
+				add("user %s: unknown access group %s", u.Username, name)
+			}
+		}
 		if u.Username == "" {
 			add("api user username is required")
 		}
@@ -242,17 +277,18 @@ func (c *Config) Validate() error {
 			add("duplicate api user %s", u.Username)
 		}
 		users[u.Username] = struct{}{}
-		if _, ok := roles[u.Role]; !ok {
+		if _, ok := roles[u.Role]; !ok && !(u.Role == "" && len(u.Groups) > 0) {
 			add("user %s: role must be admin, operator, or viewer", u.Username)
 		}
 		if u.PasswordHash != "" && !strings.HasPrefix(u.PasswordHash, "$argon2id$") {
 			add("user %s: password_hash must be argon2id", u.Username)
 		}
 	}
-	if len(c.API.Auth.Users) > 0 && strings.TrimSpace(c.API.Auth.JWTSecret) == "" {
+	if (len(c.API.Auth.Users) > 0 || c.API.Auth.LDAP.Enabled) && strings.TrimSpace(c.API.Auth.JWTSecret) == "" {
 		add("api.auth.jwt_secret is required when users are configured")
 	}
 	for _, k := range c.API.Auth.APIKeys {
+		validScope(k.Name, k.VLANIDs)
 		if k.Key == "" || k.Name == "" {
 			add("api key name and key are required")
 		}

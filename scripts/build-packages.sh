@@ -13,6 +13,7 @@ test -f output/pdf/godhcp-admin-guide.pdf || {
 python3 scripts/check-licenses.py
 release_dir="dist/releases/$package_version"
 mkdir -p "$release_dir"
+cp output/pdf/godhcp-admin-guide.pdf "$release_dir/"
 run_nfpm() {
   if test -n "${NFPM:-}"; then
     "$NFPM" "$@"
@@ -31,7 +32,7 @@ for package_arch in amd64 arm64; do
   cp output/pdf/godhcp-admin-guide.pdf "$stage_dir/"
   cp LICENSE NOTICE THIRD_PARTY_LICENSES "$stage_dir/"
   cp -R third_party "$stage_dir/"
-  tar -czf "$release_dir/godhcp_${package_version}_linux_${package_arch}.tar.gz" -C "$stage_dir" .
+  COPYFILE_DISABLE=1 tar -czf "$release_dir/godhcp_${package_version}_linux_${package_arch}.tar.gz" -C "$stage_dir" .
   python3 - "$package_arch" "$package_version" "$stage_dir" <<'PY'
 import pathlib, sys
 arch, version, stage = sys.argv[1:]
@@ -47,12 +48,4 @@ PY
   rm -rf "$stage_dir"
   trap - EXIT
 done
-python3 - "$release_dir" <<'PY'
-import hashlib, pathlib, sys
-directory = pathlib.Path(sys.argv[1])
-files = sorted(p for p in directory.glob('godhcp_*_linux_*') if p.is_file())
-with (directory / 'SHA256SUMS').open('w') as stream:
-    for path in files:
-        stream.write(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
-print(directory.resolve())
-PY
+python3 scripts/write-release-checksums.py "$release_dir"

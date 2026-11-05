@@ -76,9 +76,17 @@ func VerifyPassword(password, encoded string) bool {
 }
 
 // Principal is an authenticated API caller.
+type Grant struct {
+	Role    string `json:"role"`
+	VLANIDs []int  `json:"vlan_ids,omitempty"`
+}
+
 type Principal struct {
-	Name string
-	Role string
+	Source          string
+	DirectoryGroups []string
+	Grants          []Grant
+	Name            string
+	Role            string
 }
 
 // Rank orders roles. A higher rank includes the lower ones.
@@ -101,8 +109,10 @@ func Allows(role, min string) bool {
 }
 
 type claims struct {
-	Role string `json:"role"`
-	Typ  string `json:"typ"`
+	Source          string   `json:"source,omitempty"`
+	DirectoryGroups []string `json:"directory_groups,omitempty"`
+	Role            string   `json:"role"`
+	Typ             string   `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -134,13 +144,18 @@ func NewIssuer(secret string, accessTTL, refreshTTL time.Duration) *Issuer {
 }
 
 func (i *Issuer) Issue(name, role string) (Tokens, error) {
+	return i.IssuePrincipal(Principal{Name: name, Role: role})
+}
+
+func (i *Issuer) IssuePrincipal(p Principal) (Tokens, error) {
+	role := p.Role
 	now := i.now()
 	accessExp := now.Add(i.accessTTL)
-	access, err := i.sign(name, role, "access", accessExp)
+	access, err := i.sign(p, "access", accessExp)
 	if err != nil {
 		return Tokens{}, err
 	}
-	refresh, err := i.sign(name, role, "refresh", now.Add(i.refreshTTL))
+	refresh, err := i.sign(p, "refresh", now.Add(i.refreshTTL))
 	if err != nil {
 		return Tokens{}, err
 	}
@@ -153,12 +168,13 @@ func (i *Issuer) Issue(name, role string) (Tokens, error) {
 	}, nil
 }
 
-func (i *Issuer) sign(name, role, typ string, exp time.Time) (string, error) {
+func (i *Issuer) sign(p Principal, typ string, exp time.Time) (string, error) {
 	c := claims{
-		Role: role,
-		Typ:  typ,
+		Role:   p.Role,
+		Source: p.Source, DirectoryGroups: p.DirectoryGroups,
+		Typ: typ,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   name,
+			Subject:   p.Name,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(i.now()),
 		},
@@ -182,5 +198,5 @@ func (i *Issuer) Parse(token, typ string) (Principal, error) {
 	if !ok || c.Typ != typ || c.Subject == "" {
 		return Principal{}, ErrUnauthorized
 	}
-	return Principal{Name: c.Subject, Role: c.Role}, nil
+	return Principal{Name: c.Subject, Role: c.Role, Source: c.Source, DirectoryGroups: c.DirectoryGroups}, nil
 }

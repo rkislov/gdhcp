@@ -59,6 +59,7 @@ logging:
   format: json
 `), "mem.yml")
 	require.NoError(t, err)
+	cfg.API.Auth.APIKeys = []config.APIKey{{Name: "test", Key: "test-key", Role: "admin"}}
 	dir := t.TempDir()
 	dsn := filepath.Join(dir, "leases.db")
 	store, err := storage.Open(ctx, "sqlite", dsn)
@@ -77,7 +78,10 @@ logging:
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	res.Body.Close()
 
-	res, err = http.Get(ts.URL + "/api/v1/status")
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/status", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-API-Key", "test-key")
+	res, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	var status map[string]any
@@ -85,7 +89,11 @@ logging:
 	res.Body.Close()
 	require.Equal(t, true, status["authoritative"])
 
-	res, err = http.Post(ts.URL+"/api/v1/parsers/circuit-id/test", "application/json", strings.NewReader(`{"parser":"cisco","circuit_id":"Gi0/1:vlan20"}`))
+	req, err = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/parsers/circuit-id/test", strings.NewReader(`{"parser":"cisco","circuit_id":"Gi0/1:vlan20"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-key")
+	res, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	var parsed map[string]any

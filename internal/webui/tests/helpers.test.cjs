@@ -3,7 +3,7 @@
 
 const {test} = require("node:test");
 const assert = require("node:assert/strict");
-const {escapeHTML, csv, state, rank, uptime} = require("../static/ui-helpers.js");
+const {escapeHTML, csv, state, rank, uptime, normalizeListResponse} = require("../static/ui-helpers.js");
 
 test("API text cannot inject tags or attributes", () => {
   assert.equal(escapeHTML('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
@@ -29,4 +29,17 @@ test("uptime shows meaningful durations", () => {
   assert.equal(uptime(90), "1 мин");
   assert.equal(uptime(3660), "1 ч 1 мин");
   assert.equal(uptime(90000), "1 д 1 ч");
+});
+
+test("null list responses are safe to render without changing other API responses", () => {
+  const original = {items: null, total: 0};
+  const normalized = normalizeListResponse(original);
+  assert.deepEqual(normalized.items.map(x => x), []);
+  assert.equal(normalized.total, 0);
+  assert.equal(original.items, null);
+  const populated = {items: [{name: "cisco"}]};
+  assert.equal(normalizeListResponse(populated), populated);
+  const status = {role: "admin"};
+  assert.equal(normalizeListResponse(status), status);
+  assert.equal(normalizeListResponse(null), null);
 });

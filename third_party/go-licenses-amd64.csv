@@ -1,7 +1,10 @@
+github.com/Azure/go-ntlmssp,https://github.com/Azure/go-ntlmssp/blob/754e69321358/LICENSE,MIT
 github.com/beorn7/perks/quantile,https://github.com/beorn7/perks/blob/v1.0.1/LICENSE,MIT
 github.com/cespare/xxhash/v2,https://github.com/cespare/xxhash/blob/v2.3.0/LICENSE.txt,MIT
 github.com/dustin/go-humanize,https://github.com/dustin/go-humanize/blob/v1.0.1/LICENSE,MIT
+github.com/go-asn1-ber/asn1-ber,https://github.com/go-asn1-ber/asn1-ber/blob/29230038a667/LICENSE,MIT
 github.com/go-chi/chi/v5,https://github.com/go-chi/chi/blob/v5.3.2/LICENSE,MIT
+github.com/go-ldap/ldap/v3,https://github.com/go-ldap/ldap/blob/v3.4.12/v3/LICENSE,MIT
 github.com/golang-jwt/jwt/v5,https://github.com/golang-jwt/jwt/blob/v5.3.1/LICENSE,MIT
 github.com/google/uuid,https://github.com/google/uuid/blob/v1.6.0/LICENSE,BSD-3-Clause
 github.com/jackc/pgpassfile,https://github.com/jackc/pgpassfile/blob/v1.0.0/LICENSE,MIT
