@@ -211,12 +211,24 @@ type DHCPv6 struct {
 }
 
 type DDNS struct {
-	Enabled     bool   `yaml:"enabled" json:"enabled"`
-	Server      string `yaml:"server,omitempty" json:"server,omitempty"`
-	Zone        string `yaml:"zone,omitempty" json:"zone,omitempty"`
-	ReverseZone string `yaml:"reverse_zone,omitempty" json:"reverse_zone,omitempty"`
-	TTL         uint32 `yaml:"ttl,omitempty" json:"ttl,omitempty"`
-	Hostname    bool   `yaml:"hostname" json:"hostname"`
+	SambaVerify     *bool    `yaml:"samba_verify,omitempty" json:"samba_verify"`
+	Enabled         bool     `yaml:"enabled" json:"enabled"`
+	Server          string   `yaml:"server,omitempty" json:"server,omitempty"`
+	Zone            string   `yaml:"zone,omitempty" json:"zone,omitempty"`
+	ReverseZone     string   `yaml:"reverse_zone,omitempty" json:"reverse_zone,omitempty"`
+	TTL             uint32   `yaml:"ttl,omitempty" json:"ttl,omitempty"`
+	Hostname        *bool    `yaml:"hostname,omitempty" json:"hostname"`
+	Principal       string   `yaml:"principal,omitempty" json:"principal,omitempty"`
+	Keytab          string   `yaml:"keytab,omitempty" json:"keytab,omitempty"`
+	Auth            string   `yaml:"auth,omitempty" json:"auth,omitempty"`
+	KeyFile         string   `yaml:"key_file,omitempty" json:"key_file,omitempty"`
+	Port            int      `yaml:"port,omitempty" json:"port,omitempty"`
+	ReverseZones    []string `yaml:"reverse_zones,omitempty" json:"reverse_zones,omitempty"`
+	ProtectedNames  []string `yaml:"protected_names,omitempty" json:"protected_names,omitempty"`
+	UpdateA         *bool    `yaml:"update_a,omitempty" json:"update_a"`
+	UpdatePTR       *bool    `yaml:"update_ptr,omitempty" json:"update_ptr"`
+	IntervalSeconds int      `yaml:"interval_seconds,omitempty" json:"interval_seconds,omitempty"`
+	TimeoutSeconds  int      `yaml:"timeout_seconds,omitempty" json:"timeout_seconds,omitempty"`
 }
 
 type HA struct {
@@ -393,6 +405,34 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.DHCPv6.Listen == "" {
 		c.DHCPv6.Listen = "[::]:547"
+	}
+	if c.DDNS.SambaVerify == nil {
+		v := true
+		c.DDNS.SambaVerify = &v
+	}
+	if c.DDNS.Auth == "" {
+		c.DDNS.Auth = "gss-tsig"
+	}
+	if c.DDNS.Port == 0 {
+		c.DDNS.Port = 53
+	}
+	if c.DDNS.IntervalSeconds == 0 {
+		c.DDNS.IntervalSeconds = 30
+	}
+	if c.DDNS.TimeoutSeconds == 0 {
+		c.DDNS.TimeoutSeconds = 10
+	}
+	if c.DDNS.Hostname == nil {
+		v := true
+		c.DDNS.Hostname = &v
+	}
+	if c.DDNS.UpdateA == nil {
+		v := true
+		c.DDNS.UpdateA = &v
+	}
+	if c.DDNS.UpdatePTR == nil {
+		v := true
+		c.DDNS.UpdatePTR = &v
 	}
 	if c.DDNS.TTL == 0 {
 		c.DDNS.TTL = 300

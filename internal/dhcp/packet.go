@@ -305,6 +305,12 @@ func (p *Packet) ClientID() string {
 }
 
 func (p *Packet) Hostname() string {
+	if fqdn, ok := p.ClientFQDN(); ok {
+		if fqdn.Flags&FQDNNoUpdate != 0 {
+			return ""
+		}
+		return fqdn.Name
+	}
 	d, ok := p.Get(OptHostname)
 	if !ok {
 		return ""

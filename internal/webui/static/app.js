@@ -259,6 +259,9 @@
     const load = async () => {
       if (editor.value !== original && !await confirmAction("Отбросить изменения?", "В редактор будет загружена активная конфигурация.", "Загрузить")) return;
       original = await api("/config", {raw: true}); editor.value = original; editorState();
+      const cfg = await api("/ddns"), f = $("#ddns-form");
+      for (const el of f.elements) { if (!el.name) continue; const value=cfg[el.name]; if (el.type === "checkbox") el.checked=!!value; else el.value=Array.isArray(value) ? value.join(", ") : (value ?? ""); }
+      if (cfg.reverse_zone) f.elements.namedItem("reverse_zones").value = [...new Set([...(cfg.reverse_zones || []),cfg.reverse_zone])].join(", ");
     };
     editor.oninput = editorState;
     editor.onkeydown = e => {
@@ -272,13 +275,21 @@
     $("#check").onclick = () => busy($("#check"), validate);
     $("#save").onclick = () => busy($("#save"), async () => {
       await validate(); if (!await confirmAction("Применить конфигурацию?", "Настройки подсетей и пулов вступят в силу сразу. Параметры слушателей и БД изменятся после перезапуска.", "Применить")) return;
-      await api("/config", {method: "PUT", headers: {"Content-Type": "application/yaml"}, body: editor.value}); original = editor.value; editorState(); toast("Конфигурация применена");
+      await api("/config", {method: "PUT", headers: {"Content-Type": "application/yaml"}, body: editor.value}); original = editor.value; await load(); toast("Конфигурация применена");
     });
     $("#reload").onclick = () => busy($("#reload"), async () => {
       if (!await confirmAction("Перечитать файл сервера?", "Применятся настройки с диска. Изменения в редакторе будут потеряны.", "Перечитать")) return;
       await api("/config/reload", {method: "POST"}); original = editor.value; await load(); toast("Конфигурация перечитана");
     });
     $("#export-config").onclick = () => busy($("#export-config"), async () => { download(await api("/config", {raw: true}), "godhcp-config-redacted.yml", "application/yaml"); toast("YAML экспортирован. JWT и API-ключи скрыты."); });
+    form("ddns-form", async v => {
+      if (editor.value !== original) throw new Error("Сначала примените или отмените изменения в YAML.");
+      const f=$("#ddns-form"), body=Object.fromEntries(v);
+      for (const name of ["enabled","hostname","update_a","update_ptr","samba_verify"]) body[name]=f.elements.namedItem(name).checked;
+      for (const name of ["port","ttl","interval_seconds","timeout_seconds"]) body[name]=Number(body[name]);
+      for (const name of ["reverse_zones","protected_names"]) body[name]=body[name].split(",").map(s=>s.trim()).filter(Boolean);
+      await api("/ddns",{method:"PUT",body:JSON.stringify(body)}); toast("Настройки DDNS сохранены");await load();
+    });
     return load;
   }
   function usersPage() {

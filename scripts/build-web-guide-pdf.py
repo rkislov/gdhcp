@@ -92,7 +92,7 @@ def furniture(canvas, doc):
     canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / Веб-интерфейс: пошаговая инструкция")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
-    canvas.drawString(MARGIN, 23, "Редакция 5 ноября 2026 / Иллюстрированное руководство")
+    canvas.drawString(MARGIN, 23, "Редакция 6 ноября 2026 / Иллюстрированное руководство")
     canvas.drawRightString(PAGE_WIDTH - MARGIN, 23, str(doc.page))
     canvas.restoreState()
 

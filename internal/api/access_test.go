@@ -29,7 +29,7 @@ func TestVLANAccessIsEnforcedByAPI(t *testing.T) {
 		v := tc.v
 		require.NoError(t, s.svc.Store().UpsertLease(context.Background(), model.Lease{IP: tc.ip, MAC: tc.ip, SubnetID: tc.sub, VLANID: &v, State: "bound", ExpiresAt: time.Now().Add(time.Hour)}))
 	}
-	for _, path := range []string{"/vlans/20", "/vlans/20/stats", "/vlans/20/leases", "/leases/192.168.20.11", "/config", "/users", "/access", "/logs/stream", "/metrics", "/relays"} {
+	for _, path := range []string{"/vlans/20", "/vlans/20/stats", "/vlans/20/leases", "/leases/192.168.20.11", "/config", "/users", "/access", "/ddns", "/logs/stream", "/metrics", "/relays"} {
 		callAPI(t, h, "GET", "/api/v1"+path, "", 403, "v10")
 	}
 	for _, tc := range []struct{ m, p, b string }{
@@ -41,6 +41,7 @@ func TestVLANAccessIsEnforcedByAPI(t *testing.T) {
 		{"PUT", "/vlans/20", `{"subnet_ref":"office-lan"}`},
 		{"POST", "/access/groups", `{"name":"escape","role":"admin"}`},
 		{"PUT", "/access/ldap", `{}`},
+		{"PUT", "/ddns", `{}`},
 		{"POST", "/config/reload", `{}`},
 	} {
 		callAPI(t, h, tc.m, "/api/v1"+tc.p, tc.b, 403, "v10")

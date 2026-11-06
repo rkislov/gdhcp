@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/kislovrs/godhcp/internal/classify"
+	"github.com/kislovrs/godhcp/internal/ddns"
 	"github.com/kislovrs/godhcp/internal/dhcp"
 	"github.com/kislovrs/godhcp/internal/ha"
 	"github.com/kislovrs/godhcp/internal/model"
@@ -274,6 +275,10 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 		}
 		return nil, nil
 	}
+	previous, readErr := s.store.GetLease(ctx, want.String())
+	if readErr != nil && !errors.Is(readErr, storage.ErrNotFound) {
+		return nil, fmt.Errorf("read lease before request: %w", readErr)
+	}
 	leased, err := s.pools.Allocate(sub.ID, mac, pkt.ClientID(), want, true)
 	if err != nil {
 		if snap.Cfg.Server.Authoritative {
@@ -284,6 +289,14 @@ func (s *Service) request(ctx context.Context, snap *Snapshot, pkt *dhcp.Packet,
 		return nil, nil
 	}
 	hostname := hostFor(sub, mac, pkt.ClientID(), pkt.Hostname())
+	_, hasHost := pkt.Get(dhcp.OptHostname)
+	_, hasFQDN := pkt.Get(dhcp.OptClientFQDN)
+	if !hasHost && !hasFQDN && hostname == "" && readErr == nil && leaseOwnedBy(previous, sub.ID, mac, pkt.ClientID(), s.now()) {
+		hostname = previous.Hostname
+	}
+	if fqdn, ok := pkt.ClientFQDN(); ok && fqdn.Flags&dhcp.FQDNNoUpdate != 0 {
+		hostname = ""
+	}
 	d, t1, t2 := sub.timers(pkt, snap.Cfg.Server.LeaseMax)
 	rec := model.Lease{
 		IP: leased.String(), MAC: mac, ClientID: pkt.ClientID(), Hostname: hostname, SubnetID: sub.ID,
@@ -501,6 +514,31 @@ func (s *Service) ack(snap *Snapshot, pkt *dhcp.Packet, sub *Subnet, yi netip.Ad
 	}
 	if hostname != "" {
 		reply.Append(dhcp.StringOption(dhcp.OptHostname, hostname))
+	}
+	if requested, ok := pkt.ClientFQDN(); ok {
+		flags := requested.Flags & dhcp.FQDNEncoded
+		name := requested.Name
+		updates := snap.Cfg.DDNS.Enabled && hostname != "" && requested.Flags&dhcp.FQDNNoUpdate == 0 && lease > 0
+		if updates {
+			if snap.Cfg.DDNS.Hostname != nil && !*snap.Cfg.DDNS.Hostname {
+				r, exists := sub.reservation(model.NormalizeMAC(pkt.MAC()), pkt.ClientID())
+				updates = exists && r.Hostname != ""
+			}
+			if complete, valid := ddns.Hostname(hostname, snap.Cfg.DDNS); valid {
+				name = complete
+			} else {
+				updates = false
+			}
+		}
+		if !updates {
+			flags |= dhcp.FQDNNoUpdate
+		} else if snap.Cfg.DDNS.UpdateA == nil || *snap.Cfg.DDNS.UpdateA {
+			flags |= dhcp.FQDNServer
+		}
+		if flags&dhcp.FQDNServer != requested.Flags&dhcp.FQDNServer {
+			flags |= dhcp.FQDNOverride
+		}
+		reply.Append(dhcp.FQDNOption(flags, name))
 	}
 	for code, value := range sub.Options {
 		if replyHas(reply, byte(code)) {

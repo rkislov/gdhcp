@@ -105,6 +105,8 @@ func (s *Server) Handler() http.Handler {
 		r.With(s.allow(auth.RoleViewer)).Get("/parsers/circuit-id/profiles", s.parserProfiles)
 		r.With(s.allow(auth.RoleAdmin)).Delete("/parsers/circuit-id/{name}", s.deleteParser)
 		r.With(s.allow(auth.RoleOperator)).Post("/parsers/circuit-id/test", s.testParser)
+		r.With(s.allow(auth.RoleAdmin)).Get("/ddns", s.getDDNS)
+		r.With(s.allow(auth.RoleAdmin)).Put("/ddns", s.putDDNS)
 		r.With(s.allow(auth.RoleAdmin)).Get("/config", s.getConfig)
 		r.With(s.allow(auth.RoleAdmin)).Put("/config", s.putConfig)
 		r.With(s.allow(auth.RoleAdmin)).Post("/config/validate", s.validateConfig)
