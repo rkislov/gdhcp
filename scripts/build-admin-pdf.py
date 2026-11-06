@@ -92,7 +92,7 @@ def furniture(canvas, doc):
     canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / Руководство администратора")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
-    canvas.drawString(MARGIN, 23, "Редакция 5 ноября 2026 / Linux и systemd")
+    canvas.drawString(MARGIN, 23, "Редакция 6 ноября 2026 / Linux и systemd")
     canvas.drawRightString(PAGE_WIDTH - MARGIN, 23, str(doc.page))
     canvas.restoreState()
 
@@ -121,6 +121,7 @@ source = (ROOT / "docs/admin-guide.md").read_text()
 upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
 source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
                         upgrade.replace("\n## ", "\n### "))
+source += "\n\n## Samba DDNS: настройка и эксплуатация\n" + (ROOT / "docs/ddns-samba.md").read_text().split("\n", 1)[1].replace("\n## ", "\n### ")
 lines = source.splitlines()
 i = 1  # The title is rendered on the cover.
 heading_count = 0

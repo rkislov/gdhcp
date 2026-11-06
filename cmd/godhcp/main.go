@@ -35,9 +35,11 @@ import (
 	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/core"
 	"github.com/kislovrs/godhcp/internal/daemon"
+	"github.com/kislovrs/godhcp/internal/ddns"
 	"github.com/kislovrs/godhcp/internal/dhcpdimport"
 	"github.com/kislovrs/godhcp/internal/logbuf"
 	"github.com/kislovrs/godhcp/internal/metrics"
+	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/server"
 	"github.com/kislovrs/godhcp/internal/storage"
 	"github.com/kislovrs/godhcp/internal/version"
@@ -105,6 +107,11 @@ func main() {
 }
 
 func runDaemon(cfg *config.Config, controlPath string) error {
+	if cfg.DDNS.Enabled {
+		if err := ddns.CheckTools(cfg.DDNS); err != nil {
+			return err
+		}
+	}
 	logBuf := logbuf.New(1000)
 	logger := newLogger(cfg, logBuf)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -115,11 +122,21 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	}
 	defer store.Close()
 	met := metrics.New()
-	svc, err := core.New(ctx, core.Options{Store: store, Config: cfg, Logger: logger, Metrics: met})
+	dnsWake := make(chan struct{}, 1)
+	svc, err := core.New(ctx, core.Options{Store: store, Config: cfg, Logger: logger, Metrics: met, OnBound: func(model.Lease) {
+		select {
+		case dnsWake <- struct{}{}:
+		default:
+		}
+	}})
 	if err != nil {
 		return fmt.Errorf("core: %w", err)
 	}
 	go svc.RunJanitor(ctx, 30*time.Second)
+	dnsWorker, err := ddns.New(store, svc.Config, logger)
+	if err != nil {
+		return err
+	}
 	// Every required listener is opened synchronously before READY=1.
 	var udp *server.Listener
 	if cfg.Server.Listen != "" && cfg.Server.Listen != "-" {
@@ -210,6 +227,10 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 		supervise("dhcp", func() error { return udp.Serve(ctx, svc, logger) })
 		logger.Info("dhcp listening", "addr", cfg.Server.Listen)
 	}
+	dnsCtx, dnsCancel := context.WithCancel(ctx)
+	dnsDone := make(chan struct{})
+	go func() { defer close(dnsDone); dnsWorker.Run(dnsCtx, dnsWake) }()
+	defer func() { dnsCancel(); <-dnsDone }()
 	logger.Info("api listening", "addr", cfg.API.Listen)
 	if err := daemon.Notify("READY=1"); err != nil {
 		return fmt.Errorf("systemd ready: %w", err)

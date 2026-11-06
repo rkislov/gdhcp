@@ -232,6 +232,9 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := ValidateDDNS(c.DDNS); err != nil {
+		add("%s", err)
+	}
 	if err := ValidateLDAP(c.API.Auth.LDAP); err != nil {
 		add("%s", err)
 	}
