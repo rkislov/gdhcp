@@ -69,4 +69,6 @@ godhcp hash-password -password 'secret'
 
 `relay.ignore_giaddrs`: точные IPv4 giaddr, которые не обслуживаются и логируются только на debug. `ddns.adopt_existing`: по умолчанию false; true разрешает принять немаркированные A/PTR под управление и обновить их по арендам, с сохранением защиты чужих меток, CNAME и защищённых имён. См. [DDNS](ddns-samba.md) и [relay](relay.md).
 
-В пакетах v0.1.12+ правило `/etc/logrotate.d/godhcp` устанавливается автоматически вместе с зависимостью logrotate. Оно обрабатывает `/var/log/godhcp/godhcp.log` и `/var/log/godhcp.log`: daily, maxsize 100M, rotate 14, compress/delaycompress, copytruncate. Существующий logging.output не изменяется.
+В пакетах v0.1.13+ правило `/etc/logrotate.d/godhcp` устанавливается автоматически вместе с зависимостью logrotate. Оно обрабатывает `/var/log/godhcp/godhcp.log` и `/var/log/godhcp.log`: daily, maxsize 100M, rotate 14, compress/delaycompress, copytruncate. Существующий logging.output не изменяется.
+
+Для прежнего `/var/log/godhcp.log` пакетное правило сохраняет архивы в `/var/log/godhcp/legacy`, чтобы пользователь службы мог создавать их без права записи в системный `/var/log`. Владелец исходного файла должен разрешать запись пользователю godhcp.

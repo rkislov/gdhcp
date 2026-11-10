@@ -24,7 +24,10 @@ logrotate -d /etc/logrotate.d/godhcp
 install -m 0640 -o godhcp -g godhcp /dev/null /var/log/godhcp/godhcp.log
 exec 3>> /var/log/godhcp/godhcp.log
 printf 'before rotation\n' >&3
-logrotate -f -s /tmp/godhcp-logrotate.state /etc/logrotate.d/godhcp
+install -m 0640 -o godhcp -g godhcp /dev/null /var/log/godhcp.log
+ printf "legacy log\n" > /var/log/godhcp.log
+ logrotate -f -s /tmp/godhcp-logrotate.state /etc/logrotate.d/godhcp
+ grep -q "legacy log" /var/log/godhcp/legacy/godhcp.log.1
 printf 'after rotation\n' >&3
 exec 3>&-
 grep -q 'before rotation' /var/log/godhcp/godhcp.log.1

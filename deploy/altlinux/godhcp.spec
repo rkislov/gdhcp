@@ -1,7 +1,7 @@
 # Copyright 2026 Kislov Roman Sergeevich; full notice below in %description.
 # SPDX-License-Identifier: Apache-2.0
 Name: godhcp
-%{!?godhcp_version:%define godhcp_version 0.1.12}
+%{!?godhcp_version:%define godhcp_version 0.1.13}
 Version: %{godhcp_version}
 Release: alt1.p10
 Summary: DHCPv4 server with embedded web management
@@ -28,7 +28,7 @@ cp -a ./* %buildroot/
 %post
 getent group godhcp >/dev/null || groupadd -r godhcp
 id godhcp >/dev/null 2>&1 || useradd -r -g godhcp -d /var/lib/godhcp -s /sbin/nologin godhcp
-install -d -m 0750 -o godhcp -g godhcp /etc/godhcp /var/lib/godhcp /var/log/godhcp
+install -d -m 0750 -o godhcp -g godhcp /etc/godhcp /var/lib/godhcp /var/log/godhcp /var/log/godhcp/legacy
 if test -d /run/systemd/system; then systemctl daemon-reload; fi
 
 %preun

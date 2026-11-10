@@ -9,7 +9,7 @@ fi
 if ! id godhcp >/dev/null 2>&1; then
   useradd --system --gid godhcp --home-dir /var/lib/godhcp --shell /usr/sbin/nologin godhcp
 fi
-install -d -m 0750 -o godhcp -g godhcp /etc/godhcp /var/lib/godhcp /var/log/godhcp
+install -d -m 0750 -o godhcp -g godhcp /etc/godhcp /var/lib/godhcp /var/log/godhcp /var/log/godhcp/legacy
 if command -v systemctl >/dev/null 2>&1 && test -d /run/systemd/system; then
   systemctl daemon-reload
 fi

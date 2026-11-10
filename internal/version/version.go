@@ -15,6 +15,6 @@
 package version
 
 const (
-	Version = "0.1.12"
+	Version = "0.1.13"
 	Author  = "Кислов Роман Сергеевич"
 )
