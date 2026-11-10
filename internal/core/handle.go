@@ -108,6 +108,12 @@ func (s *Service) dispatch(ctx context.Context, snap *Snapshot, in Input) (*Outp
 	mac := model.NormalizeMAC(pkt.MAC())
 
 	if pkt.Relayed() {
+		for _, address := range snap.Cfg.Relay.IgnoreGIAddrs {
+			if pkt.GIAddr.String() == address {
+				s.log.Debug("ignored configured relay", "giaddr", address)
+				return nil, nil
+			}
+		}
 		if !snap.Cfg.Relay.Enabled {
 			s.log.Warn("dropped relayed packet", "reason", "relay disabled", "giaddr", pkt.GIAddr.String())
 			return nil, nil

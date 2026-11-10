@@ -380,3 +380,25 @@ func join(lines []string) string {
 		return out
 	}(), []byte("\n")))
 }
+
+func TestConfiguredIgnoredRelayCannotObtainLease(t *testing.T) {
+	var logs bytes.Buffer
+	svc := newTestService(t, slog.New(slog.NewTextHandler(&logs, nil)))
+	cfg := svc.Config()
+	cfg.Relay.IgnoreGIAddrs = []string{"10.0.0.1"}
+	require.NoError(t, svc.Apply(context.Background(), cfg))
+	pkt := discover("02:00:00:00:00:77", 77)
+	pkt.GIAddr = netip.MustParseAddr("10.0.0.1")
+	pkt.Hops = 1
+	out, err := svc.Handle(context.Background(), Input{Packet: pkt})
+	require.NoError(t, err)
+	require.Nil(t, out)
+	require.NotContains(t, logs.String(), "level=WARN")
+	cfg = svc.Config()
+	cfg.Relay.IgnoreGIAddrs = nil
+	require.NoError(t, svc.Apply(context.Background(), cfg))
+	pkt.Add(dhcp.OptRelayAgent, append(dhcpOpt82(1, []byte("Gi0/1:vlan10")), dhcpOpt82(2, []byte("relay-01"))...))
+	out, err = svc.Handle(context.Background(), Input{Packet: pkt})
+	require.NoError(t, err)
+	require.NotNil(t, out, "removing ignore entry via reload restores service")
+}

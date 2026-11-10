@@ -5,6 +5,7 @@ package ddns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,6 +20,16 @@ import (
 	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/storage"
 )
+
+// ErrOwnershipConflict means existing DNS data prevented a guarded update.
+var ErrOwnershipConflict = errors.New("DDNS ownership conflict: existing DNS records preserved")
+
+func ownershipError(err error) error {
+	if err != nil && strings.Contains(err.Error(), "YXRRSET") {
+		return fmt.Errorf("%w: %v", ErrOwnershipConflict, err)
+	}
+	return err
+}
 
 type executor func(context.Context, string, []string, []string, string) (string, error)
 type nsClient struct {
@@ -147,10 +158,14 @@ func (c *nsClient) Set(ctx context.Context, r storage.DNSRecord) error {
 	// Only a missing ownership marker permits a claim attempt. Network/auth
 	// failures and foreign ownership are never converted to an insecure update.
 	if !strings.Contains(err.Error(), "NXRRSET") {
-		return err
+		return ownershipError(err)
 	}
 	claim := fmt.Sprintf("prereq nxrrset %s TXT\nprereq nxrrset %s %s\nprereq nxrrset %s CNAME\nupdate add %s %d TXT \"%s\"\nupdate add %s %d %s %s\n", marker, r.Name, r.Type, r.Name, marker, r.TTL, r.Token, r.Name, r.TTL, r.Type, r.Value)
-	return c.confirm(ctx, r, c.send(ctx, r, claim), false)
+	if c.cfg.AdoptExisting {
+		// Adopt only unmarked names, atomically protecting foreign owners and aliases.
+		claim = fmt.Sprintf("prereq nxrrset %s TXT\nprereq nxrrset %s CNAME\nupdate add %s %d TXT \"%s\"\n", marker, r.Name, marker, r.TTL, r.Token) + update
+	}
+	return ownershipError(c.confirm(ctx, r, c.send(ctx, r, claim), false))
 }
 func (c *nsClient) Remove(ctx context.Context, r storage.DNSRecord) error {
 	marker := "_godhcp-owner." + r.Name

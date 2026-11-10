@@ -214,6 +214,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	for _, address := range c.Relay.IgnoreGIAddrs {
+		ip, err := netip.ParseAddr(address)
+		if err != nil || !ip.Is4() || ip.IsUnspecified() || ip.IsMulticast() {
+			add("relay.ignore_giaddrs entry %q must be a unicast IPv4 address", address)
+		}
+	}
 	seenGI := map[string]struct{}{}
 	for _, t := range c.Relay.TrustedRelays {
 		if t.GIAddr == "" && t.RemoteID == "" {

@@ -10,11 +10,12 @@ import (
 
 func TestDDNSSettingsValidationAndPersistence(t *testing.T) {
 	s, h := workflowAPI(t)
-	callAPI(t, h, "PUT", "/api/v1/ddns", `{"enabled":false,"server":"dc.example.org","zone":"hosts.example.org"}`, 200, "test-admin")
+	callAPI(t, h, "PUT", "/api/v1/ddns", `{"enabled":false,"adopt_existing":true,"server":"dc.example.org","zone":"hosts.example.org"}`, 200, "test-admin")
 	require.Equal(t, "dc.example.org", s.svc.Config().DDNS.Server)
 	saved, err := config.Load(s.svc.Config().Path)
 	require.NoError(t, err)
 	require.Equal(t, "dc.example.org", saved.DDNS.Server)
+	require.True(t, saved.DDNS.AdoptExisting)
 	rec := callAPI(t, h, "GET", "/api/v1/ddns", "", 200, "test-admin")
 	require.Contains(t, rec.Body.String(), `"server":"dc.example.org"`)
 	callAPI(t, h, "PUT", "/api/v1/ddns", `{"enabled":true,"server":"broken"}`, 400, "test-admin")

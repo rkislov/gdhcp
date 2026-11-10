@@ -100,4 +100,20 @@ func TestSambaDNSLifecycle(t *testing.T) {
 	require.NoError(t, st.DeleteLease(ctx, l.IP))
 	require.NoError(t, w.Reconcile(ctx))
 	require.Empty(t, query("10.2.0.192.in-addr.arpa", "PTR"))
+	// Explicit adoption updates both an existing administrator A and an old PTR.
+	yes := true
+	cfg.DDNS.UpdateA = &yes
+	cfg.DDNS.AdoptExisting = true
+	l.IP = "192.0.2.20"
+	l.Hostname = "foreign"
+	require.NoError(t, st.UpsertLease(ctx, l))
+	require.NoError(t, w.Reconcile(ctx))
+	require.Equal(t, l.IP, query("foreign.hosts.dhcp.test", "A"))
+	require.Equal(t, "foreign.hosts.dhcp.test.", query("20.2.0.192.in-addr.arpa", "PTR"))
+	require.NotEmpty(t, query("_godhcp-owner.foreign.hosts.dhcp.test", "TXT"))
+	require.NoError(t, st.DeleteLease(ctx, l.IP))
+	require.NoError(t, w.Reconcile(ctx))
+	require.Empty(t, query("foreign.hosts.dhcp.test", "A"))
+	require.Empty(t, query("20.2.0.192.in-addr.arpa", "PTR"))
+
 }

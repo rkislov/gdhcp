@@ -195,3 +195,26 @@ func TestHostnamePolicy(t *testing.T) {
 	_, ok = Hostname("gateway", cfg.DDNS)
 	require.False(t, ok)
 }
+
+func TestSlash22UsesFourReverse24Zones(t *testing.T) {
+	now := time.Now()
+	yes := true
+	cfg := &config.Config{DDNS: config.DDNS{Enabled: true, Server: "dc.example.org", Zone: "hosts.example.org", Hostname: &yes, ReverseZones: []string{"116.168.192.in-addr.arpa", "117.168.192.in-addr.arpa", "118.168.192.in-addr.arpa", "119.168.192.in-addr.arpa"}}}
+	cfg.ApplyDefaults()
+	leases := []model.Lease{}
+	for i := 116; i <= 119; i++ {
+		leases = append(leases, model.Lease{IP: fmt.Sprintf("192.168.%d.25", i), MAC: fmt.Sprintf("02:00:00:00:00:%02x", i), Hostname: fmt.Sprintf("client%d", i), State: model.StateBound, ExpiresAt: now.Add(time.Hour)})
+	}
+	records, blocked := desired(cfg, leases, "test-owner", now)
+	require.Empty(t, blocked)
+	ptr := map[string]bool{}
+	for _, r := range records {
+		if r.Type == "PTR" {
+			ptr[r.Zone] = true
+		}
+	}
+	for _, zone := range cfg.DDNS.ReverseZones {
+		require.True(t, ptr[canonical(zone)], zone)
+	}
+	require.Len(t, ptr, 4)
+}

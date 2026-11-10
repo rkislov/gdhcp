@@ -66,3 +66,5 @@ godhcp hash-password -password 'secret'
 ### LDAP и область прав
 
 `api.auth.ldap` настраивает LDAPS/StartTLS, поиск и служебный bind; `api.auth.groups` задаёт роли групп, `vlan_ids` у пользователя, группы или API-ключа ограничивает область VLAN. Пустой список означает глобальную область. Предпочтительная настройка пользователей, LDAP и групп — через веб-раздел «Пользователи». Подробности и YAML: [доступ и LDAP](access-control.md).
+
+`relay.ignore_giaddrs`: точные IPv4 giaddr, которые не обслуживаются и логируются только на debug. `ddns.adopt_existing`: по умолчанию false; true разрешает принять немаркированные A/PTR под управление и обновить их по арендам, с сохранением защиты чужих меток, CNAME и защищённых имён. См. [DDNS](ddns-samba.md) и [relay](relay.md).

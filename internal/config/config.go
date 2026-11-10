@@ -157,6 +157,7 @@ type Reservation struct {
 }
 
 type Relay struct {
+	IgnoreGIAddrs      []string       `yaml:"ignore_giaddrs,omitempty" json:"ignore_giaddrs,omitempty"`
 	Enabled            bool           `yaml:"enabled" json:"enabled"`
 	TrustGIAddr        *bool          `yaml:"trust_giaddr,omitempty" json:"trust_giaddr,omitempty"`
 	RequireOption82    bool           `yaml:"require_option_82" json:"require_option_82"`
@@ -223,6 +224,7 @@ type DHCPv6 struct {
 }
 
 type DDNS struct {
+	AdoptExisting   bool     `yaml:"adopt_existing,omitempty" json:"adopt_existing"`
 	SambaVerify     *bool    `yaml:"samba_verify,omitempty" json:"samba_verify"`
 	Enabled         bool     `yaml:"enabled" json:"enabled"`
 	Server          string   `yaml:"server,omitempty" json:"server,omitempty"`

@@ -31,6 +31,7 @@ samba-tool domain exportkeytab /tmp/dhcp-dns.keytab --principal=dhcp-dns
 samba-tool dns zonecreate 127.0.0.1 hosts.dhcp.test -U 'Administrator%Test-only-Admin-739!'
 samba-tool dns zonecreate 127.0.0.1 2.0.192.in-addr.arpa -U 'Administrator%Test-only-Admin-739!'
 samba-tool dns add 127.0.0.1 hosts.dhcp.test foreign A 192.0.2.250 -U 'Administrator%Test-only-Admin-739!'
+samba-tool dns add 127.0.0.1 2.0.192.in-addr.arpa 20 PTR legacy.hosts.dhcp.test -U 'Administrator%Test-only-Admin-739!'
 useradd --system --no-create-home godhcp
 chown root:godhcp /tmp/dhcp-dns.keytab
 chmod 0640 /tmp/dhcp-dns.keytab

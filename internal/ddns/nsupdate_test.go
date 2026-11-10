@@ -139,3 +139,59 @@ func TestSambaReadbackRequiresExactAuthenticatedState(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnershipConflictPreservesGuardedUpdates(t *testing.T) {
+	calls := []string{}
+	c := &nsClient{cfg: config.DDNS{Auth: "gss-tsig", TimeoutSeconds: 2}, exec: func(ctx context.Context, name string, args, env []string, input string) (string, error) {
+		calls = append(calls, input)
+		if len(calls) == 1 {
+			return "update failed: NXRRSET", fmt.Errorf("exit 2")
+		}
+		return "update failed: YXRRSET", fmt.Errorf("exit 2")
+	}}
+	err := c.Set(context.Background(), record())
+	require.ErrorIs(t, err, ErrOwnershipConflict)
+	require.Len(t, calls, 2, "must not retry without ownership prerequisites")
+	require.Contains(t, calls[1], "prereq nxrrset client.hosts.example.org. A")
+	require.Contains(t, calls[1], "prereq nxrrset _godhcp-owner.client.hosts.example.org. TXT")
+	require.NotContains(t, calls[1], "update delete client.hosts.example.org.")
+}
+
+func TestAdoptionRequiresAbsentMarkerAndAliasForAAndPTR(t *testing.T) {
+	for _, typ := range []string{"A", "PTR"} {
+		for _, conflict := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/conflict=%t", typ, conflict), func(t *testing.T) {
+				r := record()
+				if typ == "PTR" {
+					r.Name = "10.2.0.192.in-addr.arpa."
+					r.Zone = "2.0.192.in-addr.arpa."
+					r.Type = "PTR"
+					r.Value = "client.hosts.example.org."
+				}
+				calls := []string{}
+				c := &nsClient{cfg: config.DDNS{Auth: "gss-tsig", TimeoutSeconds: 2, AdoptExisting: true}, exec: func(ctx context.Context, name string, args, env []string, input string) (string, error) {
+					calls = append(calls, input)
+					if len(calls) == 1 {
+						return "NXRRSET", fmt.Errorf("missing ownership")
+					}
+					if conflict {
+						return "YXRRSET", fmt.Errorf("foreign marker or alias")
+					}
+					return "", nil
+				}}
+				err := c.Set(context.Background(), r)
+				if conflict {
+					require.ErrorIs(t, err, ErrOwnershipConflict)
+				} else {
+					require.NoError(t, err)
+				}
+				require.Len(t, calls, 2)
+				require.Contains(t, calls[1], "prereq nxrrset _godhcp-owner."+r.Name+" TXT\n")
+				require.Contains(t, calls[1], "prereq nxrrset "+r.Name+" CNAME\n")
+				require.Contains(t, calls[1], "update delete "+r.Name+" "+r.Type+"\n")
+				require.Contains(t, calls[1], " "+r.Type+" "+r.Value+"\n")
+				require.NotContains(t, calls[1], "prereq nxrrset "+r.Name+" "+r.Type+"\n")
+			})
+		}
+	}
+}

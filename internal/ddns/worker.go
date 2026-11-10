@@ -9,6 +9,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -312,7 +313,11 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 			if next.Type == "A" {
 				failedNames[next.Name] = true
 			}
-			w.log.Warn("ddns update failed; will retry", "name", next.Name, "type", next.Type, "err", err)
+			if errors.Is(err, ErrOwnershipConflict) {
+				w.log.Warn("ddns ownership conflict; existing records preserved", "name", next.Name, "type", next.Type, "err", err)
+			} else {
+				w.log.Warn("ddns update failed; will retry", "name", next.Name, "type", next.Type, "err", err)
+			}
 			continue
 		}
 		next.AppliedAt = now

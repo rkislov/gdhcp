@@ -285,7 +285,7 @@
     form("ddns-form", async v => {
       if (editor.value !== original) throw new Error("Сначала примените или отмените изменения в YAML.");
       const f=$("#ddns-form"), body=Object.fromEntries(v);
-      for (const name of ["enabled","hostname","update_a","update_ptr","samba_verify"]) body[name]=f.elements.namedItem(name).checked;
+      for (const name of ["enabled","hostname","update_a","update_ptr","samba_verify","adopt_existing"]) body[name]=f.elements.namedItem(name).checked;
       for (const name of ["port","ttl","interval_seconds","timeout_seconds"]) body[name]=Number(body[name]);
       for (const name of ["reverse_zones","protected_names"]) body[name]=body[name].split(",").map(s=>s.trim()).filter(Boolean);
       await api("/ddns",{method:"PUT",body:JSON.stringify(body)}); toast("Настройки DDNS сохранены");await load();
