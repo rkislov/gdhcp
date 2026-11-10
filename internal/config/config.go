@@ -204,10 +204,22 @@ type Metrics struct {
 	Listen  string `yaml:"listen,omitempty" json:"listen,omitempty"`
 }
 
+type IPv6Pool struct {
+	Interface string   `yaml:"interface" json:"interface"`
+	Prefix    string   `yaml:"prefix" json:"prefix"`
+	Start     string   `yaml:"start" json:"start"`
+	End       string   `yaml:"end" json:"end"`
+	Relays    []string `yaml:"relays,omitempty" json:"relays,omitempty"`
+}
+
 type DHCPv6 struct {
-	Enabled    bool   `yaml:"enabled" json:"enabled"`
-	Listen     string `yaml:"listen,omitempty" json:"listen,omitempty"`
-	ServerDUID string `yaml:"server_duid,omitempty" json:"server_duid,omitempty"`
+	Pools      []IPv6Pool `yaml:"pools,omitempty" json:"pools,omitempty"`
+	DNS        []string   `yaml:"dns,omitempty" json:"dns,omitempty"`
+	Preferred  uint32     `yaml:"preferred_seconds,omitempty" json:"preferred_seconds,omitempty"`
+	Valid      uint32     `yaml:"valid_seconds,omitempty" json:"valid_seconds,omitempty"`
+	Enabled    bool       `yaml:"enabled" json:"enabled"`
+	Listen     string     `yaml:"listen,omitempty" json:"listen,omitempty"`
+	ServerDUID string     `yaml:"server_duid,omitempty" json:"server_duid,omitempty"`
 }
 
 type DDNS struct {
@@ -402,6 +414,14 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Metrics.Listen == "" {
 		c.Metrics.Listen = ":9090"
+	}
+	if c.DHCPv6.Enabled {
+		if c.DHCPv6.Valid == 0 {
+			c.DHCPv6.Valid = 7200
+		}
+		if c.DHCPv6.Preferred == 0 {
+			c.DHCPv6.Preferred = c.DHCPv6.Valid / 2
+		}
 	}
 	if c.DHCPv6.Listen == "" {
 		c.DHCPv6.Listen = "[::]:547"

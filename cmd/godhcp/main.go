@@ -37,6 +37,7 @@ import (
 	"github.com/kislovrs/godhcp/internal/daemon"
 	"github.com/kislovrs/godhcp/internal/ddns"
 	"github.com/kislovrs/godhcp/internal/dhcpdimport"
+	"github.com/kislovrs/godhcp/internal/dhcpv6"
 	"github.com/kislovrs/godhcp/internal/logbuf"
 	"github.com/kislovrs/godhcp/internal/metrics"
 	"github.com/kislovrs/godhcp/internal/model"
@@ -146,6 +147,14 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 		}
 		defer udp.Close()
 	}
+	var udp6 *dhcpv6.Listener
+	if cfg.DHCPv6.Enabled {
+		udp6, err = dhcpv6.Listen(ctx, cfg.DHCPv6, store, logger)
+		if err != nil {
+			return fmt.Errorf("dhcpv6 listen: %w", err)
+		}
+		defer udp6.Close()
+	}
 	httpSrv := &http.Server{Addr: cfg.API.Listen, Handler: api.New(svc, met, logBuf).Handler(), ReadHeaderTimeout: 10 * time.Second}
 	httpListener, err := net.Listen("tcp", cfg.API.Listen)
 	if err != nil {
@@ -226,6 +235,12 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	if udp != nil {
 		supervise("dhcp", func() error { return udp.Serve(ctx, svc, logger) })
 		logger.Info("dhcp listening", "addr", cfg.Server.Listen)
+	}
+	if udp6 != nil {
+		done := make(chan struct{})
+		supervise("dhcpv6", func() error { defer close(done); return udp6.Serve(ctx) })
+		defer func() { udp6.Close(); <-done }()
+		logger.Info("dhcpv6 listening", "addr", cfg.DHCPv6.Listen)
 	}
 	dnsCtx, dnsCancel := context.WithCancel(ctx)
 	dnsDone := make(chan struct{})

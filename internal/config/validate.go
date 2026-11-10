@@ -30,6 +30,9 @@ func (c *Config) Validate() error {
 		errs = append(errs, fmt.Sprintf(f, args...))
 	}
 
+	if err := c.DHCPv6.Validate(); err != nil {
+		add("dhcpv6: %s", err)
+	}
 	if c.Server.LeaseDefault <= 0 {
 		add("server.lease_default must be positive")
 	}

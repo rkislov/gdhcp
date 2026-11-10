@@ -18,7 +18,7 @@
 | `logging` | `debug`/`info`/`warn`/`error`, `json` или `text`, файл |
 | `metrics` | Prometheus listen |
 | `ha` | Доля хэша клиента: `primary` отвечает при `hash < split` |
-| `dhcpv6` | Заготовка, протокол не обслуживается |
+| `dhcpv6` | Пулы IPv6, интерфейсы, доверенные relay, DNS и сроки аренды. [Настройка DHCPv6](dhcpv6.md) |
 | `ddns` | Защищённые A/PTR-обновления; с версии 0.1.10, см. [Samba DDNS](ddns-samba.md) |
 
 `relay.unknown_vlan_action`: `ignore`, `nak`, `default-pool`. Для последнего укажите `default_pool`.

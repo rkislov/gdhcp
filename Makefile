@@ -1,7 +1,7 @@
 # Copyright 2026 Кислов Роман Сергеевич
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build test cover docker tidy release packages admin-guide-pdf web-guide-pdf binaries test-dhcp-docker test-systemd-vm test-load-docker
+.PHONY: build test cover docker tidy release packages admin-guide-pdf web-guide-pdf binaries test-dhcp-docker test-systemd-vm test-load-docker test-dhcpv6-docker
 .DEFAULT_GOAL := build
 
 test-load-docker:
@@ -9,6 +9,9 @@ test-load-docker:
 
 test-systemd-vm:
 	bash scripts/test-systemd-vm.sh
+
+test-dhcpv6-docker:
+	bash scripts/test-dhcpv6-docker.sh
 
 test-dhcp-docker:
 	bash scripts/test-dhcp-docker.sh
