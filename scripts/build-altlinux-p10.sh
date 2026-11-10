@@ -15,10 +15,11 @@ stage="$PWD/output/altlinux-p10/$package_version"
 result="$PWD/dist/altlinux-p10/$package_version"
 mkdir -p "$stage" "$result"
 payload=$(mktemp -d "$stage/payload.XXXXXX")
-mkdir -p "$payload/usr/bin" "$payload/usr/lib/systemd/system" "$payload/etc/godhcp" "$payload/usr/share/doc/godhcp" "$result"
+mkdir -p "$payload/usr/bin" "$payload/usr/lib/systemd/system" "$payload/etc/logrotate.d" "$payload/etc/godhcp" "$payload/usr/share/doc/godhcp" "$result"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o "$payload/usr/bin/godhcp" ./cmd/godhcp
 go version -m "$payload/usr/bin/godhcp" > "$result/BUILDINFO.txt"
 cp deploy/systemd/godhcp.service "$payload/usr/lib/systemd/system/"
+cp deploy/logrotate/godhcp "$payload/etc/logrotate.d/godhcp"
 cp deploy/package/config.yml.example "$payload/etc/godhcp/"
 cp -R docs/. "$payload/usr/share/doc/godhcp/"
 cp LICENSE NOTICE THIRD_PARTY_LICENSES "$payload/usr/share/doc/godhcp/"

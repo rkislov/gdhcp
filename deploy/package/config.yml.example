@@ -46,3 +46,4 @@ metrics:
 logging:
   level: info
   format: json
+  output: /var/log/godhcp/godhcp.log

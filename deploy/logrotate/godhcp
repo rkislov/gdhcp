@@ -1,0 +1,14 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+/var/log/godhcp/godhcp.log /var/log/godhcp.log {
+    daily
+    maxsize 100M
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    nodateext
+    copytruncate
+    su godhcp godhcp
+}

@@ -479,7 +479,7 @@ sudo tail -n 30 /var/log/godhcp/godhcp.log
 
 ### Настройка ротации
 
-Установите logrotate средствами своего дистрибутива: Debian, Astra и ALT Linux - `apt-get install logrotate`; Rocky Linux и РЕД ОС - `dnf install logrotate`. Готовый пример включён в пакет и архив: `docs/examples/godhcp.logrotate`. При пакетной установке включите его:
+Установите logrotate средствами своего дистрибутива: Debian, Astra и ALT Linux - `apt-get install logrotate`; Rocky Linux и РЕД ОС - `dnf install logrotate`. Готовый пример включён в пакет и архив: `docs/examples/godhcp.logrotate`. Начиная с v0.1.12 пакет устанавливает logrotate и правило `/etc/logrotate.d/godhcp` автоматически, создаёт `/var/log/godhcp` и задаёт файл журнала в новом config.yml.example. Существующий рабочий конфиг сохраняется: для записи в файл добавьте `logging.output: /var/log/godhcp/godhcp.log` и перезапустите службу. Правило также поддерживает прежний путь `/var/log/godhcp.log`; для него проверьте права файла. Планировщик logrotate должен быть включён средствами ОС. При ручной установке можно включить пример:
 
 ```bash
 sudo install -o root -g root -m 0644 \
