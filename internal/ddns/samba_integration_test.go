@@ -7,6 +7,7 @@ package ddns
 
 import (
 	"context"
+	"fmt"
 	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/storage"
@@ -115,5 +116,27 @@ func TestSambaDNSLifecycle(t *testing.T) {
 	require.NoError(t, w.Reconcile(ctx))
 	require.Empty(t, query("foreign.hosts.dhcp.test", "A"))
 	require.Empty(t, query("20.2.0.192.in-addr.arpa", "PTR"))
+
+	// Reconcile a log-sized burst against the real authority within the former
+	// 30-second cutoff. Check the durable outcome and the last pair in DNS.
+	const clients = 208
+	for i := 1; i <= clients; i++ {
+		l.IP = fmt.Sprintf("192.0.2.%d", i)
+		l.Hostname = fmt.Sprintf("bulk-%03d", i)
+		require.NoError(t, st.UpsertLease(ctx, l))
+	}
+	bulk, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	start := time.Now()
+	require.NoError(t, w.Reconcile(bulk))
+	t.Logf("reconciled %d Samba A/PTR pairs in %s", clients, time.Since(start))
+	applied, err := w.state.DNSRecords(ctx)
+	require.NoError(t, err)
+	require.Len(t, applied, 2*clients)
+	for _, r := range applied {
+		require.False(t, r.AppliedAt.IsZero(), "%s %s", r.Name, r.Type)
+	}
+	require.Equal(t, "192.0.2.208", query("bulk-208.hosts.dhcp.test", "A"))
+	require.Equal(t, "bulk-208.hosts.dhcp.test.", query("208.2.0.192.in-addr.arpa", "PTR"))
 
 }

@@ -171,27 +171,57 @@ func TestAdoptionRequiresAbsentMarkerAndAliasForAAndPTR(t *testing.T) {
 				calls := []string{}
 				c := &nsClient{cfg: config.DDNS{Auth: "gss-tsig", TimeoutSeconds: 2, AdoptExisting: true}, exec: func(ctx context.Context, name string, args, env []string, input string) (string, error) {
 					calls = append(calls, input)
-					if len(calls) == 1 {
-						return "NXRRSET", fmt.Errorf("missing ownership")
-					}
 					if conflict {
-						return "YXRRSET", fmt.Errorf("foreign marker or alias")
+						if len(calls) == 1 {
+							return "YXRRSET", fmt.Errorf("foreign marker or alias")
+						}
+						return "NXRRSET", fmt.Errorf("no matching ownership")
 					}
 					return "", nil
 				}}
 				err := c.Set(context.Background(), r)
 				if conflict {
 					require.ErrorIs(t, err, ErrOwnershipConflict)
+					require.Len(t, calls, 2)
+					require.Contains(t, calls[1], "prereq yxrrset _godhcp-owner."+r.Name+" TXT")
 				} else {
 					require.NoError(t, err)
+					require.Len(t, calls, 1)
 				}
-				require.Len(t, calls, 2)
-				require.Contains(t, calls[1], "prereq nxrrset _godhcp-owner."+r.Name+" TXT\n")
-				require.Contains(t, calls[1], "prereq nxrrset "+r.Name+" CNAME\n")
-				require.Contains(t, calls[1], "update delete "+r.Name+" "+r.Type+"\n")
-				require.Contains(t, calls[1], " "+r.Type+" "+r.Value+"\n")
-				require.NotContains(t, calls[1], "prereq nxrrset "+r.Name+" "+r.Type+"\n")
+				require.Contains(t, calls[0], "prereq nxrrset _godhcp-owner."+r.Name+" TXT\n")
+				require.Contains(t, calls[0], "prereq nxrrset "+r.Name+" CNAME\n")
+				require.Contains(t, calls[0], "update delete "+r.Name+" "+r.Type+"\n")
+				require.Contains(t, calls[0], " "+r.Type+" "+r.Value+"\n")
+				require.NotContains(t, calls[0], "prereq nxrrset "+r.Name+" "+r.Type+"\n")
 			})
 		}
+	}
+}
+
+func TestAdoptionRecoversAnAlreadyAppliedIntent(t *testing.T) {
+	for _, response := range []string{"YXRRSET", "REFUSED"} {
+		t.Run(response, func(t *testing.T) {
+			var calls []string
+			c := &nsClient{cfg: config.DDNS{Auth: "gss-tsig", TimeoutSeconds: 2, AdoptExisting: true}, exec: func(_ context.Context, name string, _, _ []string, input string) (string, error) {
+				require.Equal(t, "nsupdate", name)
+				calls = append(calls, input)
+				if len(calls) == 1 {
+					if response == "YXRRSET" {
+						return "tsig verify failure\nupdate failed: YXRRSET", fmt.Errorf("exit 2")
+					}
+					return "update failed: REFUSED", fmt.Errorf("exit 2")
+				}
+				return "", nil
+			}}
+			err := c.Set(context.Background(), record())
+			if response == "REFUSED" {
+				require.ErrorContains(t, err, "REFUSED")
+				require.Len(t, calls, 1)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, calls, 2)
+			require.Contains(t, calls[1], "prereq yxrrset _godhcp-owner."+record().Name+" TXT")
+		})
 	}
 }

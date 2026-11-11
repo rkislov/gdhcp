@@ -23,8 +23,10 @@ import (
 	"github.com/kislovrs/godhcp/internal/config"
 	"github.com/kislovrs/godhcp/internal/model"
 	"github.com/kislovrs/godhcp/internal/storage"
+	"golang.org/x/sync/errgroup"
 )
 
+// Updater must support concurrent operations for different DNS names.
 type Updater interface {
 	Set(context.Context, storage.DNSRecord) error
 	Remove(context.Context, storage.DNSRecord) error
@@ -54,15 +56,11 @@ func (w *Worker) Run(ctx context.Context, wake <-chan struct{}) {
 	for {
 		cfg := w.config().DDNS
 		if cfg.Enabled {
-			budget := time.Duration(cfg.IntervalSeconds) * time.Second
-			if budget < time.Duration(cfg.TimeoutSeconds)*time.Second {
-				budget = time.Duration(cfg.TimeoutSeconds) * time.Second
-			}
-			cycle, cancel := context.WithTimeout(ctx, budget)
-			if err := w.Reconcile(cycle); err != nil && ctx.Err() == nil {
+			// The interval schedules passes. Each DNS command has its own
+			// timeout, and shutdown cancels the entire pass.
+			if err := w.Reconcile(ctx); err != nil && ctx.Err() == nil {
 				w.log.Warn("ddns synchronization failed; will retry", "err", err)
 			}
-			cancel()
 		}
 		delay := time.Duration(cfg.IntervalSeconds) * time.Second
 		if delay <= 0 {
@@ -252,6 +250,12 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	current := map[string]storage.DNSRecord{}
 	unavailable := map[string]bool{}
 	for _, old := range previous {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if w.config() != cfg {
+			return nil
+		}
 		if !inScope(c, old) {
 			continue
 		} // Changing server/zones never deletes from an unconfigured authority.
@@ -274,60 +278,95 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 		delete(current, old.Key())
 		w.log.Info("ddns deleted", "name", old.Name, "type", old.Type)
 	}
-	keys := make([]string, 0, len(want))
-	for key := range want {
-		keys = append(keys, key)
+	// Keep a client's forward and reverse updates together. A conflict on
+	// one name must not block reverse updates for other clients.
+	jobs := make(map[string][]storage.DNSRecord)
+	for _, next := range want {
+		host := next.Name
+		if next.Type == "PTR" {
+			host = next.Value
+		}
+		jobs[host] = append(jobs[host], next)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		a, b := want[keys[i]], want[keys[j]]
-		if a.Type != b.Type {
-			return a.Type == "A"
+	hosts := make([]string, 0, len(jobs))
+	for host := range jobs {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+
+	group, workCtx := errgroup.WithContext(ctx)
+	const parallelUpdates = 8
+	group.SetLimit(parallelUpdates)
+	for _, host := range hosts {
+		if workCtx.Err() != nil {
+			break
 		}
-		return keys[i] < keys[j]
-	})
-	failedNames := map[string]bool{}
-	for _, key := range keys {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if unavailable[key] {
-			if want[key].Type == "A" {
-				failedNames[want[key].Name] = true
+		records := jobs[host]
+		sort.Slice(records, func(i, j int) bool { return records[i].Type < records[j].Type })
+		group.Go(func() error {
+			for _, next := range records {
+				if err := workCtx.Err(); err != nil {
+					return err
+				}
+				// A config reload or an expired lease can invalidate queued work.
+				if w.config() != cfg {
+					return nil
+				}
+				if unavailable[next.Key()] {
+					return nil
+				}
+				ok, err := w.applyRecord(workCtx, client, current[next.Key()], next)
+				if err != nil || !ok {
+					return err
+				}
 			}
-			continue
-		}
-		next := want[key]
-		if next.Type == "PTR" && enabled(c.UpdateA) && failedNames[next.Value] {
-			continue
-		}
-		old, exists := current[key]
-		refresh := time.Duration(next.TTL) * time.Second / 2
-		if exists && old.Token == next.Token && old.Value == next.Value && old.TTL == next.TTL && old.LeaseExpires.Equal(next.LeaseExpires) && !old.AppliedAt.IsZero() && now.Sub(old.AppliedAt) < refresh {
-			continue
-		}
-		// Store the intent before sending; a crash after DNS succeeds is recoverable.
-		if err := w.state.PutDNSRecord(ctx, next); err != nil {
-			return err
-		}
-		if err := client.Set(ctx, next); err != nil {
-			if next.Type == "A" {
-				failedNames[next.Name] = true
-			}
-			if errors.Is(err, ErrOwnershipConflict) {
-				w.log.Warn("ddns ownership conflict; existing records preserved", "name", next.Name, "type", next.Type, "err", err)
-			} else {
-				w.log.Warn("ddns update failed; will retry", "name", next.Name, "type", next.Type, "err", err)
-			}
-			continue
-		}
-		next.AppliedAt = now
-		if err := w.state.PutDNSRecord(ctx, next); err != nil {
-			return err
-		}
-		w.log.Info("ddns updated", "name", next.Name, "type", next.Type, "value", next.Value)
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	for name := range blocked {
 		w.log.Warn("ddns duplicate hostname; existing records preserved", "name", name)
 	}
 	return nil
+}
+
+// applyRecord saves the intent before contacting DNS so a lost reply or process
+// restart can be recovered using the same ownership token.
+func (w *Worker) applyRecord(ctx context.Context, client Updater, old, next storage.DNSRecord) (bool, error) {
+	now := w.now()
+	remaining := next.LeaseExpires.Sub(now)
+	if remaining <= 0 {
+		return false, nil
+	}
+	next.TTL = min(next.TTL, uint32(max(1, remaining/time.Second)))
+	refresh := time.Duration(next.TTL) * time.Second / 2
+	if old.Token == next.Token && old.Value == next.Value && old.TTL == next.TTL && old.LeaseExpires.Equal(next.LeaseExpires) && !old.AppliedAt.IsZero() && now.Sub(old.AppliedAt) < refresh {
+		return true, nil
+	}
+	if err := w.state.PutDNSRecord(ctx, next); err != nil {
+		return false, err
+	}
+	request := next
+	if old.Token == next.Token {
+		request.AppliedAt = old.AppliedAt
+	}
+	if err := client.Set(ctx, request); err != nil {
+		if errors.Is(err, ErrOwnershipConflict) {
+			w.log.Warn("ddns ownership conflict; existing records preserved", "name", next.Name, "type", next.Type, "err", err)
+		} else {
+			w.log.Warn("ddns update failed; will retry", "name", next.Name, "type", next.Type, "err", err)
+		}
+		return false, nil
+	}
+	next.AppliedAt = w.now()
+	if err := w.state.PutDNSRecord(ctx, next); err != nil {
+		return false, err
+	}
+	w.log.Info("ddns updated", "name", next.Name, "type", next.Type, "value", next.Value)
+	return true, nil
 }

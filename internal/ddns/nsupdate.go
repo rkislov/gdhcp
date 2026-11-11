@@ -31,6 +31,16 @@ func ownershipError(err error) error {
 	return err
 }
 
+func claimError(err error, adopt bool) error {
+	if err == nil || !strings.Contains(err.Error(), "YXRRSET") {
+		return err
+	}
+	if adopt {
+		return ownershipError(fmt.Errorf("claim requires no ownership TXT or CNAME: %w", err))
+	}
+	return ownershipError(fmt.Errorf("claim requires no existing record, ownership TXT or CNAME (adopt_existing=false): %w", err))
+}
+
 type executor func(context.Context, string, []string, []string, string) (string, error)
 type nsClient struct {
 	cfg  config.DDNS
@@ -142,6 +152,9 @@ func (c *nsClient) send(ctx context.Context, r storage.DNSRecord, body string) e
 	timeout, cancel := context.WithTimeout(ctx, time.Duration(c.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 	out, e := c.exec(timeout, "nsupdate", args, c.env, input)
+	if e != nil && timeout.Err() != nil {
+		return fmt.Errorf("nsupdate: %w", timeout.Err())
+	}
 	if e != nil {
 		return fmt.Errorf("nsupdate: %w: %s", e, strings.TrimSpace(out))
 	}
@@ -150,22 +163,48 @@ func (c *nsClient) send(ctx context.Context, r storage.DNSRecord, body string) e
 func (c *nsClient) Set(ctx context.Context, r storage.DNSRecord) error {
 	marker := "_godhcp-owner." + r.Name
 	update := fmt.Sprintf("update delete %s %s\nupdate add %s %d %s %s\n", r.Name, r.Type, r.Name, r.TTL, r.Type, r.Value)
-	owned := fmt.Sprintf("prereq yxrrset %s TXT \"%s\"\n", marker, r.Token) + update
-	err := c.confirm(ctx, r, c.send(ctx, r, owned), false)
-	if err == nil {
-		return nil
+	absentAlias := fmt.Sprintf("prereq nxrrset %s CNAME\n", r.Name)
+	owned := fmt.Sprintf("prereq yxrrset %s TXT \"%s\"\n", marker, r.Token) + absentAlias + update
+	claim := fmt.Sprintf("prereq nxrrset %s TXT\n", marker) + absentAlias
+	addMarker := fmt.Sprintf("update add %s %d TXT \"%s\"\n", marker, r.TTL, r.Token)
+	if c.cfg.AdoptExisting {
+		claim += addMarker + update
+	} else {
+		claim += fmt.Sprintf("prereq nxrrset %s %s\n", r.Name, r.Type) + addMarker +
+			fmt.Sprintf("update add %s %d %s %s\n", r.Name, r.TTL, r.Type, r.Value)
 	}
-	// Only a missing ownership marker permits a claim attempt. Network/auth
-	// failures and foreign ownership are never converted to an insecure update.
-	if !strings.Contains(err.Error(), "NXRRSET") {
+	send := func(body string) error {
+		err := c.send(ctx, r, body)
+		// A rejected prerequisite only selects another guarded transaction.
+		// Samba can report a TSIG verification error alongside the rejection.
+		if err != nil && (strings.Contains(err.Error(), "NXRRSET") || strings.Contains(err.Error(), "YXRRSET")) {
+			return err
+		}
+		return c.confirm(ctx, r, err, false)
+	}
+	if c.cfg.AdoptExisting && r.AppliedAt.IsZero() {
+		// An untracked name can be adopted with a single signed transaction.
+		err := send(claim)
+		if err == nil || !strings.Contains(err.Error(), "YXRRSET") {
+			return err
+		}
+		// An interrupted cycle may have already installed our marker.
+		// Only an exact marker match can authorize this second transaction.
+		refreshErr := send(owned)
+		if refreshErr == nil {
+			return nil
+		}
+		if strings.Contains(refreshErr.Error(), "NXRRSET") || strings.Contains(refreshErr.Error(), "YXRRSET") {
+			return claimError(err, true)
+		}
+		return refreshErr
+	}
+	err := send(owned)
+	if err == nil || !strings.Contains(err.Error(), "NXRRSET") {
 		return ownershipError(err)
 	}
-	claim := fmt.Sprintf("prereq nxrrset %s TXT\nprereq nxrrset %s %s\nprereq nxrrset %s CNAME\nupdate add %s %d TXT \"%s\"\nupdate add %s %d %s %s\n", marker, r.Name, r.Type, r.Name, marker, r.TTL, r.Token, r.Name, r.TTL, r.Type, r.Value)
-	if c.cfg.AdoptExisting {
-		// Adopt only unmarked names, atomically protecting foreign owners and aliases.
-		claim = fmt.Sprintf("prereq nxrrset %s TXT\nprereq nxrrset %s CNAME\nupdate add %s %d TXT \"%s\"\n", marker, r.Name, marker, r.TTL, r.Token) + update
-	}
-	return ownershipError(c.confirm(ctx, r, c.send(ctx, r, claim), false))
+	return claimError(send(claim), c.cfg.AdoptExisting)
+
 }
 func (c *nsClient) Remove(ctx context.Context, r storage.DNSRecord) error {
 	marker := "_godhcp-owner." + r.Name

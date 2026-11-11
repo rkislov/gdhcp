@@ -9,6 +9,8 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,12 +21,15 @@ import (
 )
 
 type fakeDNS struct {
+	mu            sync.Mutex
 	records       map[string]storage.DNSRecord
 	sets, removes int
 	fail          bool
 }
 
 func (f *fakeDNS) Set(ctx context.Context, r storage.DNSRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if old, ok := f.records[r.Key()]; ok && old.Token != r.Token {
 		return fmt.Errorf("foreign record")
 	}
@@ -36,6 +41,8 @@ func (f *fakeDNS) Set(ctx context.Context, r storage.DNSRecord) error {
 	return nil
 }
 func (f *fakeDNS) Remove(ctx context.Context, r storage.DNSRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if old, ok := f.records[r.Key()]; ok {
 		if old.Token == "" {
 			return nil
@@ -217,4 +224,62 @@ func TestSlash22UsesFourReverse24Zones(t *testing.T) {
 		require.True(t, ptr[canonical(zone)], zone)
 	}
 	require.Len(t, ptr, 4)
+}
+
+func TestRunCompletesLargeAdoptionPastPollingInterval(t *testing.T) {
+	w, cfg, _, _ := fixture(t)
+	cfg.DDNS.AdoptExisting = true
+	cfg.DDNS.IntervalSeconds = 1
+	cfg.DDNS.TimeoutSeconds = 1
+	const leases = 208
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for i := 1; i <= leases; i++ {
+		l := lease(w, fmt.Sprintf("client-%03d", i))
+		l.IP = fmt.Sprintf("192.0.2.%d", i)
+		require.NoError(t, w.store.UpsertLease(ctx, l))
+	}
+
+	var active, peak atomic.Int32
+	w.factory = func(_ context.Context, c config.DDNS) (Updater, func(), error) {
+		return &nsClient{cfg: c, exec: func(ctx context.Context, _ string, _, _ []string, _ string) (string, error) {
+			n := active.Add(1)
+			defer active.Add(-1)
+			for previous := peak.Load(); n > previous && !peak.CompareAndSwap(previous, n); previous = peak.Load() {
+			}
+			timer := time.NewTimer(25 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-timer.C:
+				return "", nil
+			}
+		}}, func() {}, nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Run(ctx, nil)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	require.Eventually(t, func() bool {
+		records, err := w.state.DNSRecords(ctx)
+		if err != nil || len(records) != 2*leases {
+			return false
+		}
+		for _, r := range records {
+			if r.AppliedAt.IsZero() {
+				return false
+			}
+		}
+		return true
+	}, 15*time.Second, 25*time.Millisecond)
+	require.Greater(t, peak.Load(), int32(1))
+	require.LessOrEqual(t, peak.Load(), int32(8))
 }
