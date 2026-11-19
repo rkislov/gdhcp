@@ -112,3 +112,7 @@ PDF содержит оглавление, закладки и встроенн�
 ## Релиз 0.1.15: кластер и fencing
 
 Перед публикацией дополнительно выполните `make test-fencing`, `make test-fencing-windows` и `make test-cluster-docker`. Администраторский PDF включает полные тексты `docs/cluster-runtime.md` и `docs/fencing.md`. Кластер экспериментальный, работает только на Linux; готовые пакеты не включают его автоматически. Примеры устанавливаются в `/usr/share/doc/godhcp/examples/`, Linux hooks — в `/usr/libexec/godhcp/`. Для настройки сети дополнительно нужны iproute2/iproute и iputils; для SSH/IPMI — клиент OpenSSH/ipmitool.
+
+## ALT Linux p11
+
+Дополнительная упаковка для x86_64, aarch64, i586, loongarch64 и riscv64: `bash scripts/build-altlinux-p11.sh`. Эльбрус не входит в поставку. Дополнительный PDF: `python3 scripts/build-admin-pdf.py --alt-p11`; результат скопируйте в `docs/godhcp-alt-p11-guide.pdf`. Границы проверки и происхождение бинарников описаны в [инструкции p11](altlinux-p11.md).

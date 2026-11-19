@@ -1,0 +1,50 @@
+# Copyright 2026 Kislov Roman Sergeevich; full notice below in %description.
+# SPDX-License-Identifier: Apache-2.0
+Name: godhcp
+%{!?godhcp_version:%define godhcp_version 0.1.15}
+Version: %{godhcp_version}
+Release: alt1.p11
+Summary: DHCPv4/v6 server with experimental cluster and fencing
+License: Apache-2.0
+Group: System/Servers
+Url: https://github.com/rkislov/gdhcp
+Source: godhcp-payload.tar.gz
+# Architecture is selected by rpmbuild --target (no BuildArch host restriction).
+AutoReqProv: no
+Requires: systemd shadow-utils util-linux logrotate python3
+
+%description
+Copyright 2026 Кислов Роман Сергеевич.
+DHCPv4 server with persistent leases, REST API and embedded Go templates web UI.
+Includes the illustrated web interface guide in PDF format.
+
+%prep
+%setup -q -c
+
+%install
+mkdir -p %buildroot
+cp -a ./* %buildroot/
+
+%post
+getent group godhcp >/dev/null || groupadd -r godhcp
+id godhcp >/dev/null 2>&1 || useradd -r -g godhcp -d /var/lib/godhcp -s /sbin/nologin godhcp
+install -d -m 0750 -o godhcp -g godhcp /etc/godhcp /var/lib/godhcp /var/log/godhcp /var/log/godhcp/legacy
+if test -d /run/systemd/system; then systemctl daemon-reload; fi
+
+%preun
+if test "$1" = 0 && test -d /run/systemd/system; then
+ systemctl stop godhcp.service || :
+ systemctl disable godhcp.service || :
+fi
+
+%postun
+if test -d /run/systemd/system; then systemctl daemon-reload; fi
+
+%files
+/usr/bin/godhcp
+/usr/libexec/godhcp
+/usr/share/godhcp
+/usr/lib/systemd/system/godhcp.service
+%config(noreplace) /etc/godhcp/config.yml.example
+%config(noreplace) /etc/logrotate.d/godhcp
+%doc /usr/share/doc/godhcp

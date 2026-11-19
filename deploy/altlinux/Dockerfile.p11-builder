@@ -1,0 +1,9 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+FROM alt:p11
+COPY ca-certificates.crt /etc/ssl/certs/godhcp-build-ca.crt
+RUN sed -i 's|http://ftp.altlinux.org/pub/distributions/ALTLinux|https://download.basealt.ru/pub/distributions/ALTLinux|g' /etc/apt/sources.list.d/*.list \
+    && echo 'Acquire::https::CaInfo "/etc/ssl/certs/godhcp-build-ca.crt";' > /etc/apt/apt.conf.d/99godhcp-ca.conf \
+    && apt-get -o Acquire::https::Timeout=30 update \
+    && apt-get install -y rpm-build \
+    && apt-get clean

@@ -7,6 +7,7 @@ import html
 import os
 import re
 import textwrap
+import sys
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -21,7 +22,9 @@ from reportlab.platypus import (
 from reportlab.platypus.tableofcontents import TableOfContents
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT = ROOT / "output/pdf/godhcp-admin-guide.pdf"
+ALT_P11 = "--alt-p11" in sys.argv
+GUIDE_TITLE = "ALT Linux p11: установка" if ALT_P11 else "Руководство администратора"
+OUTPUT = ROOT / ("output/pdf/godhcp-alt-p11-guide.pdf" if ALT_P11 else "output/pdf/godhcp-admin-guide.pdf")
 VERSION = re.search(r'Version = "([^"]+)"', (ROOT / "internal/version/version.go").read_text()).group(1)
 FONT_DIR = Path(os.environ.get("GODHCP_PDF_FONTS", "/usr/share/fonts/truetype/dejavu"))
 for name, filename in (("Guide", "DejaVuSans.ttf"), ("GuideBold", "DejaVuSans-Bold.ttf"), ("GuideMono", "DejaVuSansMono.ttf")):
@@ -90,7 +93,7 @@ def furniture(canvas, doc):
     canvas.saveState()
     canvas.setFillColor(MUTED)
     canvas.setFont("Guide", 7.4)
-    canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / Руководство администратора")
+    canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / {GUIDE_TITLE}")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
     canvas.drawString(MARGIN, 23, "Редакция 19 ноября 2026 / Linux и systemd")
@@ -101,11 +104,11 @@ def furniture(canvas, doc):
 story = [
     Spacer(1, 34),
     Paragraph("GoDHCP", ParagraphStyle("CoverTitle", parent=h2, fontSize=30, leading=38)),
-    Paragraph("Руководство администратора", ParagraphStyle("CoverSubtitle", parent=h2, fontSize=22, leading=30)),
-    Paragraph(f"Версия {VERSION} · Linux amd64 и arm64", body),
+    Paragraph(GUIDE_TITLE, ParagraphStyle("CoverSubtitle", parent=h2, fontSize=22, leading=30)),
+    Paragraph(f"Версия {VERSION} · ALT p11" if ALT_P11 else f"Версия {VERSION} · Linux amd64 и arm64", body),
     Paragraph("© 2026 Кислов Роман Сергеевич. Apache License 2.0.", body),
     Spacer(1, 16),
-    Paragraph("Установка пакетов и запуск через systemd. Экспорт настроек ISC DHCP, импорт, проверка переноса, переключение и откат. Резервное копирование, диагностика, автоматический кластер mTLS и fencing.", body),
+    Paragraph("Архитектуры, установка, кластер и fencing в ALT Linux p11." if ALT_P11 else "Установка пакетов и запуск через systemd. Экспорт настроек ISC DHCP, импорт, проверка переноса, переключение и откат. Резервное копирование, диагностика, автоматический кластер mTLS и fencing.", body),
     Spacer(1, 10),
     Paragraph("Перед переключением рабочей сети пройдите приёмку на изолированном стенде. Действующие аренды ISC автоматически не переносятся.", ParagraphStyle("CoverNote", parent=body, textColor=ACCENT)),
     Spacer(1, 18),
@@ -117,17 +120,18 @@ toc.levelStyles = [
     ParagraphStyle("TOC1", fontName="Guide", fontSize=8.4, leading=11, leftIndent=14, textColor=MUTED),
 ]
 story += [toc, PageBreak()]
-source = (ROOT / "docs/admin-guide.md").read_text()
-# Keep the upgrade procedure identical in Markdown and both PDF guides.
-upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
-source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
-                        upgrade.replace("\n## ", "\n### "))
-source += "\n\n## Samba DDNS: настройка и эксплуатация\n" + (ROOT / "docs/ddns-samba.md").read_text().split("\n", 1)[1].replace("\n## ", "\n### ")
-for filename, title in (("cluster-runtime.md", "Автоматический кластер: установка и эксплуатация"),
-                        ("fencing.md", "Готовые fencing-адаптеры и настройка инфраструктуры")):
-    appendix = (ROOT / "docs" / filename).read_text().split("\n", 1)[1]
-    appendix = re.sub(r"(?m)^#{2,4} ", "### ", appendix)
-    source += "\n\n## " + title + "\n" + appendix
+source = (ROOT / ("docs/altlinux-p11.md" if ALT_P11 else "docs/admin-guide.md")).read_text()
+if not ALT_P11:
+    # Keep the upgrade procedure identical in Markdown and both PDF guides.
+    upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
+    source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
+                            upgrade.replace("\n## ", "\n### "))
+    source += "\n\n## Samba DDNS: настройка и эксплуатация\n" + (ROOT / "docs/ddns-samba.md").read_text().split("\n", 1)[1].replace("\n## ", "\n### ")
+    for filename, title in (("cluster-runtime.md", "Автоматический кластер: установка и эксплуатация"),
+                            ("fencing.md", "Готовые fencing-адаптеры и настройка инфраструктуры")):
+        appendix = (ROOT / "docs" / filename).read_text().split("\n", 1)[1]
+        appendix = re.sub(r"(?m)^#{2,4} ", "### ", appendix)
+        source += "\n\n## " + title + "\n" + appendix
 lines = source.splitlines()
 i = 1  # The title is rendered on the cover.
 heading_count = 0
@@ -192,7 +196,7 @@ while i < len(lines):
 
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 doc = GuideDocument(str(OUTPUT), pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
-                    topMargin=45, bottomMargin=49, title="GoDHCP - Руководство администратора",
+                    topMargin=45, bottomMargin=49, title="GoDHCP - " + GUIDE_TITLE,
                     author="Кислов Роман Сергеевич", pageCompression=1)
 doc.multiBuild(story, onFirstPage=furniture, onLaterPages=furniture)
 # Keep standalone PDF distribution accompanied by its own notices and font license.

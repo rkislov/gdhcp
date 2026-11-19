@@ -75,6 +75,7 @@ DHCPv6 в текущих исходниках поддерживает выда�
 
 - [Руководство администратора и экспорт настроек ISC DHCP](docs/admin-guide.md)
 - [Сборка Linux-пакетов и PDF](docs/building.md)
+- [ALT Linux p11: архитектуры и установка](docs/altlinux-p11.md)
 - [Архитектура](docs/architecture.md)
 - [Резервирование и настройка PostgreSQL mTLS](docs/clustering.md)
 - [Автоматический кластер с mTLS: экспериментальный запуск и стенд](docs/cluster-runtime.md)
