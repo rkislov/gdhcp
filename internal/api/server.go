@@ -869,20 +869,11 @@ func (s *Server) validateConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) reloadConfig(w http.ResponseWriter, r *http.Request) {
-	path := s.svc.Config().Path
-	if path == "" {
-		writeErr(w, http.StatusBadRequest, "bad_request", "config path is empty")
-		return
-	}
-	cfg, err := config.Load(path)
-	if err != nil {
+	if err := s.svc.ReloadConfiguration(r.Context()); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid_config", err.Error())
 		return
 	}
-	if err := s.svc.Apply(r.Context(), cfg); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid_config", err.Error())
-		return
-	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded"})
 }
 
@@ -1196,7 +1187,7 @@ func (s *Server) commit(ctx context.Context, cfg *config.Config) error {
 	if err := s.svc.Apply(ctx, cfg); err != nil {
 		return err
 	}
-	if cfg.Path != "" {
+	if cfg.Path != "" && !s.svc.ClusterManaged() {
 		if err := config.Save(cfg.Path, cfg); err != nil {
 			if rollbackErr := s.svc.Apply(context.WithoutCancel(ctx), previous); rollbackErr != nil {
 				return fmt.Errorf("save failed: %v; restoring active config failed: %w", err, rollbackErr)

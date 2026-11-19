@@ -27,6 +27,9 @@ for target in linux/amd64 linux/386 linux/armv7 linux/arm64 darwin/amd64 darwin/
   cp -R third_party docs "$stage_dir/"
   mkdir -p "$stage_dir/configs"
   cp configs/example.yml configs/dev.yml "$stage_dir/configs/"
+  mkdir -p "$stage_dir/scripts" "$stage_dir/deploy"
+  cp scripts/godhcp-fence-peer scripts/godhcp-cluster-ip scripts/godhcp-fence-windows.ps1 scripts/GodhcpFencing.psm1 "$stage_dir/scripts/"
+  cp -R deploy/cluster deploy/fencing deploy/systemd deploy/logrotate "$stage_dir/deploy/"
   COPYFILE_DISABLE=1 tar -czf "$release_dir/$binary.tar.gz" -C "$stage_dir" .
   rm -rf "$stage_dir"
   trap - EXIT

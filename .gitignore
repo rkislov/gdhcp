@@ -12,3 +12,6 @@ coverage.out
 /node_modules/
 *.test
 .env
+
+__pycache__/
+*.pyc

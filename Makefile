@@ -57,3 +57,15 @@ release:
 	GOOS=windows GOARCH=amd64            CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/godhcp-windows-amd64.exe ./cmd/godhcp
 	GOOS=windows GOARCH=386              CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dist/godhcp-windows-386.exe ./cmd/godhcp
 	ls -lh dist
+
+.PHONY: test-cluster-docker
+test-cluster-docker:
+	bash scripts/test-cluster-docker.sh
+
+.PHONY: test-fencing
+test-fencing:
+	python3 -m unittest discover -s tests/fencing -p 'test_*.py' -v
+
+.PHONY: test-fencing-windows
+test-fencing-windows:
+	bash scripts/test-fencing-windows.sh

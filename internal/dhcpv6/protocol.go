@@ -185,6 +185,11 @@ func newEngine(ctx context.Context, c config.DHCPv6, store storage.IPv6Store, lo
 // Handle only one relay hop. The configured source, receiving interface and
 // relay link-address must all identify the same pool before touching a lease.
 func (e *engine) handle(ctx context.Context, in []byte, iface string, peer netip.Addr) ([]byte, error) {
+	if guard, ok := e.store.(interface{ CheckAuthority(context.Context) error }); ok {
+		if err := guard.CheckAuthority(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if len(in) < 4 {
 		return nil, nil
 	}

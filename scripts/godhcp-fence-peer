@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+"""Fail-closed fencing dispatcher. Python 3 stdlib; no shell interpolation."""
+import argparse
+import base64
+import json
+import os
+import re
+import signal
+import ssl
+import stat
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+
+class FenceError(Exception):
+    pass
+
+
+def require(ok, message):
+    if not ok:
+        raise FenceError(message)
+
+
+def protected(path):
+    require(os.path.isabs(path), 'file path must be absolute')
+    with open(path, encoding='utf-8') as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and not info.st_mode & 0o022,
+                'file must be regular and not group/world writable')
+        require(info.st_uid in (0, os.geteuid()), 'unexpected file owner')
+        return stream.read()
+
+
+def secret(path):
+    value = protected(path).strip()
+    require(not os.stat(path).st_mode & 0o007, 'secret must not be world accessible')
+    require(value and '\n' not in value and '\r' not in value, 'invalid secret')
+    return value
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        require(key not in result, 'duplicate JSON key')
+        result[key] = value
+    return result
+
+
+def load_target(path, node):
+    require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', node), 'invalid node-id')
+    config = json.loads(protected(path), object_pairs_hook=unique_object)
+    require(set(config) == {'local_node', 'targets'}, 'invalid configuration keys')
+    require(isinstance(config['local_node'], str) and config['local_node'], 'local_node required')
+    require(node != config['local_node'], 'self-fencing rejected')
+    require(node in config['targets'], 'unknown node-id')
+    target = config['targets'][node]
+    require(target.get('restart_disabled') is True, 'automatic restart must be disabled before use')
+    fields = {
+        'ssh': {'host', 'user', 'key_file', 'known_hosts'},
+        'proxmox': {'vmid', 'uuid'},
+        'kvm': {'uuid'},
+        'ipmi': {'host', 'username', 'password_file', 'guid'},
+        'redfish': {'url', 'username', 'password_file', 'ca_file', 'system_uri', 'uuid', 'serial'},
+    }
+    provider = target.get('provider')
+    require(provider in fields, 'unknown provider')
+    require(set(target) == fields[provider] | {'provider', 'restart_disabled'}, 'invalid target keys')
+    for key in fields[provider] - {'vmid'}:
+        require(isinstance(target[key], str) and target[key].strip(), 'empty target field')
+    for key in ('uuid', 'guid'):
+        if key in target:
+            require(uuid.UUID(target[key]).int != 0, 'nil UUID is not an identity')
+    return target
+
+
+class Runner:
+    def __init__(self, seconds=18):
+        self.deadline = time.monotonic() + seconds
+
+    def remaining(self):
+        value = self.deadline - time.monotonic()
+        require(value > 0, 'fencing deadline exceeded')
+        return value
+
+    def run(self, args):
+        # Keep children in the hook process group: the daemon kills the whole group.
+        try:
+            result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=self.remaining(),
+                                    env={**os.environ, 'LC_ALL': 'C'})
+        except subprocess.TimeoutExpired:
+            raise FenceError('provider command timed out') from None
+        require(result.returncode == 0, 'provider command failed')
+        return result.stdout.decode('utf-8').strip()
+
+    def wait_off(self, state, off):
+        while state() != off:
+            time.sleep(min(0.25, self.remaining()))
+        self.remaining()
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        if len(args) > 1 and args[1] is not None:
+            args[1].close()
+        raise FenceError('HTTP redirect rejected')
+
+
+class Redfish:
+    def __init__(self, target, runner):
+        self.t, self.runner = target, runner
+        base = urllib.parse.urlsplit(target['url'])
+        require(base.scheme == 'https' and base.hostname and not base.username and
+                not base.password and base.path in ('', '/') and not base.query and
+                not base.fragment, 'BMC URL must be an HTTPS origin')
+        self.origin = target['url'].rstrip('/')
+        self.opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}), NoRedirect(),
+            urllib.request.HTTPSHandler(context=ssl.create_default_context(cafile=target['ca_file'])))
+        password = secret(target['password_file'])
+        require(':' not in target['username'], 'invalid username')
+        self.auth = 'Basic ' + base64.b64encode(
+            (target['username'] + ':' + password).encode()).decode()
+
+    def request(self, path, body=None):
+        parsed = urllib.parse.urlsplit(path)
+        require(path.startswith('/redfish/v1/') and not parsed.netloc and not parsed.scheme
+                and not parsed.fragment and not parsed.query and '..' not in path
+                and '\\' not in path, 'invalid Redfish resource path')
+        request = urllib.request.Request(self.origin + path,
+            data=None if body is None else json.dumps(body).encode(),
+            headers={'Authorization': self.auth, 'Content-Type': 'application/json',
+                     'Cache-Control': 'no-cache'})
+        try:
+            response = self.opener.open(request, timeout=min(3, self.runner.remaining()))
+        except urllib.error.HTTPError as error:
+            error.close()
+            raise FenceError('Redfish HTTP request failed') from None
+        with response:
+            data = response.read(1024 * 1024 + 1)
+            require(len(data) <= 1024 * 1024, 'Redfish response too large')
+            return json.loads(data) if data else {}
+
+    def fence(self):
+        def read():
+            data = self.request(self.t['system_uri'])
+            require(data.get('UUID', '').lower() == self.t['uuid'].lower() and
+                    data.get('SerialNumber') == self.t['serial'], 'BMC system identity mismatch')
+            require(data.get('PowerState') in ('On', 'Off', 'PoweringOn', 'PoweringOff'),
+                    'unknown Redfish power state')
+            return data
+        data = read()
+        if data['PowerState'] != 'Off':
+            action = data['Actions']['#ComputerSystem.Reset']
+            allowed = action.get('ResetType@Redfish.AllowableValues')
+            if allowed is None and '@Redfish.ActionInfo' in action:
+                info = self.request(action['@Redfish.ActionInfo'])
+                allowed = next((p.get('AllowableValues', []) for p in info['Parameters']
+                                if p['Name'] == 'ResetType'), [])
+            require(allowed is not None and 'ForceOff' in allowed, 'ForceOff not advertised')
+            self.request(action['target'], {'ResetType': 'ForceOff'})
+        # A task acknowledgement is never sufficient. Fresh Off is authoritative.
+        self.runner.wait_off(lambda: read()['PowerState'], 'Off')
+
+
+def fence(target, node, runner):
+    provider = target['provider']
+    if provider == 'ssh':
+        # Remote forced command receives only a validated node-id, not a shell program.
+        host, user = target['host'], target['user']
+        require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.-]*', host), 'invalid SSH host')
+        require(re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', user), 'invalid SSH user')
+        for key in ('key_file', 'known_hosts'):
+            protected(target[key])
+        output = runner.run(['/usr/bin/ssh', '-F', '/dev/null', '-T',
+            '-i', target['key_file'], '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
+            '-o', 'ConnectTimeout=3', '-o', 'StrictHostKeyChecking=yes',
+            '-o', 'UserKnownHostsFile=' + target['known_hosts'], user + '@' + host, node])
+        require(output == 'FENCED ' + node, 'remote fencing acknowledgement missing')
+    elif provider == 'proxmox':
+        vmid = str(target['vmid'])
+        require(re.fullmatch(r'[1-9][0-9]*', vmid), 'invalid VMID')
+        # Local fixed-owner mode only. Any HA membership or migration lock blocks fencing.
+        ha = json.loads(runner.run(['/usr/bin/pvesh', 'get', '/cluster/ha/resources',
+                                    '--output-format', 'json']))
+        require(not any(x['sid'] == 'vm:' + vmid for x in ha), 'VM must not be PVE HA managed')
+        config = runner.run(['/usr/sbin/qm', 'config', vmid])
+        require(not re.search(r'^lock:', config, re.M), 'VM locked or migrating')
+        require(not re.search(r'^onboot:\s*1\s*$', config, re.M), 'PVE autostart enabled')
+        require(re.search(r'^smbios1:.*(?:^|[ ,])uuid=' + re.escape(target['uuid']) +
+                          r'(?:,|$)', config, re.M), 'VM UUID mismatch')
+        state = lambda: runner.run(['/usr/sbin/qm', 'status', vmid])
+        initial = state()
+        require(initial in ('status: running', 'status: stopped'), 'unknown PVE power state')
+        if initial != 'status: stopped':
+            runner.run(['/usr/sbin/qm', 'stop', vmid, '--timeout', '10'])
+        runner.wait_off(state, 'status: stopped')
+    elif provider == 'kvm':
+        uuid = target['uuid']
+        require(re.fullmatch(r'[0-9a-fA-F-]{36}', uuid), 'invalid UUID')
+        cmd = ['/usr/bin/virsh', '-c', 'qemu:///system']
+        import xml.etree.ElementTree as ET
+        xml = ET.fromstring(runner.run(cmd + ['dumpxml', uuid]))
+        require(xml.findtext('uuid', '').lower() == uuid.lower(), 'domain UUID mismatch')
+        info = runner.run(cmd + ['dominfo', uuid])
+        require(re.search(r'^Autostart:\s*disable\s*$', info, re.M), 'libvirt autostart enabled')
+        state = lambda: runner.run(cmd + ['domstate', uuid])
+        initial = state()
+        require(initial in ('running', 'paused', 'pmsuspended', 'shut off', 'in shutdown', 'crashed'),
+                'unknown domain state')
+        if initial != 'shut off':
+            runner.run(cmd + ['destroy', uuid])
+        runner.wait_off(state, 'shut off')
+    elif provider == 'ipmi':
+        secret(target['password_file'])  # permissions checked; ipmitool reads the file itself
+        cmd = ['/usr/bin/ipmitool', '-I', 'lanplus', '-H', target['host'],
+               '-U', target['username'], '-f', target['password_file'], '-N', '2', '-R', '1']
+        guid = runner.run(cmd + ['mc', 'guid'])
+        require(re.search(r'^System GUID\s*:\s*' + re.escape(target['guid']) + r'\s*$',
+                          guid, re.M | re.I), 'BMC GUID mismatch')
+        state = lambda: runner.run(cmd + ['chassis', 'power', 'status'])
+        initial = state()
+        require(initial in ('Chassis Power is on', 'Chassis Power is off'), 'unknown IPMI power state')
+        if initial != 'Chassis Power is off':
+            runner.run(cmd + ['chassis', 'power', 'off'])
+        runner.wait_off(state, 'Chassis Power is off')
+    elif provider == 'redfish':
+        Redfish(target, runner).fence()
+    else:
+        raise FenceError('unknown provider')
+    runner.remaining()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--config', default='/etc/godhcp/fencing.json')
+    parser.add_argument('--ssh-dispatch', action='store_true', help='read node-id from SSH_ORIGINAL_COMMAND')
+    parser.add_argument('node', nargs='?')
+    args = parser.parse_args()
+    node = args.node
+    if args.ssh_dispatch:
+        require(node is None, 'no node argument allowed with SSH dispatcher')
+        node = os.environ.get('SSH_ORIGINAL_COMMAND', '')
+    require(node is not None, 'node-id required')
+    # Hard wall-clock bound also covers DNS resolution and trickling HTTP responses.
+    def expired(signum, frame):
+        raise FenceError('fencing deadline exceeded')
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, 18.5)
+    target = load_target(args.config, node)
+    fence(target, node, Runner())
+    print('FENCED ' + node)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except FenceError as error:
+        # FenceError messages are fixed internal diagnostics, never provider output.
+        print('fencing failed: ' + str(error), file=sys.stderr)
+        sys.exit(1)
+    except Exception:
+        # Never print provider output, HTTP headers or credentials on failure.
+        print('fencing failed: check target, management access and provider state', file=sys.stderr)
+        sys.exit(1)

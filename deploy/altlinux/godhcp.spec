@@ -1,7 +1,7 @@
 # Copyright 2026 Kislov Roman Sergeevich; full notice below in %description.
 # SPDX-License-Identifier: Apache-2.0
 Name: godhcp
-%{!?godhcp_version:%define godhcp_version 0.1.14}
+%{!?godhcp_version:%define godhcp_version 0.1.15}
 Version: %{godhcp_version}
 Release: alt1.p10
 Summary: DHCPv4 server with embedded web management
@@ -11,7 +11,7 @@ Url: https://github.com/rkislov/gdhcp
 Source: godhcp-payload.tar.gz
 BuildArch: x86_64
 AutoReqProv: no
-Requires: systemd shadow-utils util-linux logrotate
+Requires: systemd shadow-utils util-linux logrotate python3
 
 %description
 Copyright 2026 Кислов Роман Сергеевич.
@@ -42,6 +42,8 @@ if test -d /run/systemd/system; then systemctl daemon-reload; fi
 
 %files
 /usr/bin/godhcp
+/usr/libexec/godhcp
+/usr/share/godhcp
 /usr/lib/systemd/system/godhcp.service
 %config(noreplace) /etc/godhcp/config.yml.example
 %config(noreplace) /etc/logrotate.d/godhcp

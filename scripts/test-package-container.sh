@@ -22,6 +22,13 @@ case "$format" in
 esac
 test -s /usr/share/doc/godhcp/godhcp-admin-guide.pdf
 test -s /usr/share/doc/godhcp/godhcp-web-guide.pdf
+test -x /usr/libexec/godhcp/godhcp-fence-peer
+test -x /usr/libexec/godhcp/godhcp-cluster-ip
+test -s /usr/share/godhcp/fencing/GodhcpFencing.psm1
+test -s /usr/share/godhcp/fencing/godhcp-fence-windows.ps1
+test -s /usr/share/doc/godhcp/examples/fencing/node.example.json
+test -s /usr/share/doc/godhcp/examples/cluster/cluster.yml.example
+/usr/libexec/godhcp/godhcp-fence-peer --help >/dev/null
 godhcp version
 getent passwd godhcp
 test ! -e /etc/godhcp/config.yml

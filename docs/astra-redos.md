@@ -1,22 +1,22 @@
-# GoDHCP 0.1.14: Astra Linux и РЕД ОС
+# GoDHCP 0.1.15: Astra Linux и РЕД ОС
 
 © 2026 Кислов Роман Сергеевич. Apache License 2.0.
 
-Пакеты для x86_64/amd64 используют неизменённый статический бинарник из тега v0.1.14. Веб-интерфейс уже встроен; Node.js не нужен. PDF со скриншотами включён в пакет.
+Пакеты для x86_64/amd64 используют неизменённый статический бинарник из тега v0.1.15. Веб-интерфейс уже встроен; Node.js не нужен. PDF со скриншотами включён в пакет.
 
 ## Скачивание и установка
 
-Файлы сборки находятся в `dist/astra-redos/0.1.14/`. Перед установкой проверьте архитектуру (`uname -m`, ожидается x86_64) и SHA-256 своего файла:
+Файлы сборки находятся в `dist/astra-redos/0.1.15/`. Перед установкой проверьте архитектуру (`uname -m`, ожидается x86_64) и SHA-256 своего файла:
 
 ```sh
 # Выполняйте из каталога с пакетом и SHA256SUMS.
 # Astra Linux:
-grep '  godhcp_0.1.14-1astra_amd64.deb$' SHA256SUMS | sha256sum -c -
-sudo apt install ./godhcp_0.1.14-1astra_amd64.deb
+grep '  godhcp_0.1.15-1astra_amd64.deb$' SHA256SUMS | sha256sum -c -
+sudo apt install ./godhcp_0.1.15-1astra_amd64.deb
 
 # РЕД ОС:
-grep '  godhcp-0.1.14-1.redos.x86_64.rpm$' SHA256SUMS | sha256sum -c -
-sudo dnf install ./godhcp-0.1.14-1.redos.x86_64.rpm
+grep '  godhcp-0.1.15-1.redos.x86_64.rpm$' SHA256SUMS | sha256sum -c -
+sudo dnf install ./godhcp-0.1.15-1.redos.x86_64.rpm
 ```
 
 Продолжайте установку только после результата OK. Пакеты не подписаны ключом репозитория; SHA-256 проверяет целостность, но не заменяет подпись доверенного издателя.
@@ -47,7 +47,7 @@ sudo systemctl status godhcp
 
 ## Воспроизведение упаковки
 
-Нужны Git, Go (для чтения buildinfo), Python 3, ripgrep и nFPM; проверен nFPM v2.43.4. Положите проверенный бинарник из релиза v0.1.14 в `dist/releases/0.1.14/godhcp_0.1.14_linux_amd64`, затем выполните:
+Нужны Git, Go (для чтения buildinfo), Python 3, ripgrep и nFPM; проверен nFPM v2.43.4. Положите проверенный бинарник из релиза v0.1.15 в `dist/releases/0.1.15/godhcp_0.1.15_linux_amd64`, затем выполните:
 
 ```sh
 bash scripts/build-astra-redos.sh

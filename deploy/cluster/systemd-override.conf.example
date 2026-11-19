@@ -1,0 +1,11 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+# Install as /etc/systemd/system/godhcp.service.d/cluster.conf AFTER setup.
+[Service]
+ExecStartPre=
+ExecStartPre=/usr/bin/godhcp -validate -config /etc/godhcp/config.yml -cluster-config /etc/godhcp/cluster.yml
+ExecStart=
+ExecStart=/usr/bin/godhcp -config /etc/godhcp/config.yml -cluster-config /etc/godhcp/cluster.yml -control-socket /run/godhcp/control.sock
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_NET_RAW
+KillMode=control-group

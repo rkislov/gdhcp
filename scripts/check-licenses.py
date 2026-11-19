@@ -23,7 +23,7 @@ check(package.get('author')==AUTHOR,'npm author must use full name')
 check(json.loads((ROOT/'package-lock.json').read_text())['packages'][''].get('license')=='Apache-2.0','npm lock license missing')
 meta=(ROOT/'deploy/nfpm.yaml').read_text()
 check('license: Apache-2.0' in meta and f'maintainer: "{AUTHOR}"' in meta,'package author/license metadata mismatch')
-source_types={'.go','.js','.cjs','.ts','.tsx','.yml','.yaml','.sql','.py','.sh','.html','.css','.service'}
+source_types={'.go','.js','.cjs','.ts','.tsx','.yml','.yaml','.sql','.py','.sh','.html','.css','.service','.ps1','.psm1'}
 for folder in ('cmd','internal','configs','api','deploy','scripts','tests'):
     for path in (ROOT/folder).rglob('*'):
         if not path.is_file() or (path.suffix not in source_types and 'Dockerfile' not in path.name):continue
@@ -37,7 +37,7 @@ for arch in ('amd64','arm64'):
     rows=list(csv.reader((ROOT/f'third_party/go-licenses-{arch}.csv').open()))
     check(bool(rows),f'{arch}: empty dependency report')
     for name,url,license_id in rows:
-        check(license_id in {'MIT','BSD-3-Clause','Apache-2.0'},f'{name}: review license {license_id}')
+        check(license_id in {'MIT','BSD-3-Clause','Apache-2.0'} or (license_id == 'MPL-2.0' and name in {'github.com/hashicorp/go-immutable-radix', 'github.com/hashicorp/golang-lru/simplelru', 'github.com/hashicorp/raft', 'github.com/hashicorp/raft-boltdb/v2'}),f'{name}: review license {license_id}')
         if name=='github.com/kislovrs/godhcp':continue
         directory=ROOT/'third_party/licenses/go'/name
         boundary=ROOT/'third_party/licenses/go'

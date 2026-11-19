@@ -71,3 +71,53 @@ Docker/VM test images are external test tools with their own licenses. Those
 images and their operating systems are not relicensed as Apache-2.0.
 The Swagger UI page loads swagger-ui-dist from unpkg at view time; its
 upstream Apache-2.0 package is not vendored in the GoDHCP binary.
+
+Cluster runtime dependencies
+------------------------------------------------------------------
+HashiCorp Raft and raft-boltdb retain their MPL-2.0 license. Original
+GoDHCP code remains Apache-2.0. Full upstream license notices are retained
+under third_party/licenses/go for these newly added modules:
+github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e
+github.com/armon/go-metrics v0.4.1
+github.com/boltdb/bolt v1.3.1
+github.com/fatih/color v1.13.0
+github.com/google/go-cmp v0.7.0
+github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3
+github.com/hashicorp/go-hclog v1.6.2
+github.com/hashicorp/go-immutable-radix v1.0.0
+github.com/hashicorp/go-metrics v0.5.4
+github.com/hashicorp/go-msgpack v0.5.5
+github.com/hashicorp/go-msgpack/v2 v2.1.2
+github.com/hashicorp/go-uuid v1.0.3
+github.com/hashicorp/golang-lru v0.5.0
+github.com/hashicorp/golang-lru/v2 v2.0.7
+github.com/hashicorp/raft v1.7.3
+github.com/hashicorp/raft-boltdb v0.0.0-20230125174641-2a8082862702
+github.com/hashicorp/raft-boltdb/v2 v2.3.0
+github.com/jcmturner/aescts/v2 v2.0.0
+github.com/jcmturner/dnsutils/v2 v2.0.0
+github.com/jcmturner/gofork v1.7.6
+github.com/jcmturner/goidentity/v6 v6.0.1
+github.com/jcmturner/gokrb5/v8 v8.4.4
+github.com/jcmturner/rpc/v2 v2.0.3
+github.com/klauspost/compress v1.19.1
+github.com/kr/pretty v0.3.0
+github.com/kylelemons/godebug v1.1.0
+github.com/mattn/go-colorable v0.1.12
+github.com/pascaldekloe/goe v0.1.0
+go.etcd.io/bbolt v1.3.5
+go.uber.org/goleak v1.3.0
+go.yaml.in/yaml/v2 v2.4.4
+golang.org/x/mod v0.41.0
+golang.org/x/tools v0.50.0
+gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
+modernc.org/cc/v4 v4.29.7
+modernc.org/ccgo/v4 v4.36.1
+modernc.org/fileutil v1.4.0
+modernc.org/gc/v2 v2.6.5
+modernc.org/gc/v3 v3.1.5
+modernc.org/goabi0 v0.2.0
+modernc.org/opt v0.2.0
+modernc.org/sortutil v1.2.1
+modernc.org/strutil v1.2.1
+modernc.org/token v1.1.0

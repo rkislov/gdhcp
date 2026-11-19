@@ -1,0 +1,29 @@
+{
+  "local_node": "management-gateway",
+  "targets": {
+    "pve-example": {
+      "provider": "proxmox", "restart_disabled": false,
+      "vmid": 201, "uuid": "11111111-1111-1111-1111-111111111111"
+    },
+    "kvm-example": {
+      "provider": "kvm", "restart_disabled": false,
+      "uuid": "11111111-1111-1111-1111-111111111112"
+    },
+    "ipmi-example": {
+      "provider": "ipmi", "restart_disabled": false,
+      "host": "bmc-b.example.net", "username": "godhcp-fence",
+      "password_file": "/etc/godhcp/fencing/bmc-b.password",
+      "guid": "11111111-1111-1111-1111-111111111113"
+    },
+    "vmware-example": {
+      "provider": "vmware", "restart_disabled": false,
+      "server": "vcenter.example.net", "vm_id": "VirtualMachine-vm-123",
+      "uuid": "11111111-1111-1111-1111-111111111114",
+      "credential_file": "C:\\ProgramData\\GoDHCP\\vcenter.credential.xml"
+    },
+    "hyperv-example": {
+      "provider": "hyperv", "restart_disabled": false,
+      "uuid": "11111111-1111-1111-1111-111111111115"
+    }
+  }
+}

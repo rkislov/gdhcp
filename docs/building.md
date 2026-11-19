@@ -37,9 +37,9 @@ python3 -m venv /tmp/godhcp-pdf-env
 
 ## Linux-пакеты
 
-Для бинарников Linux (amd64, 386, armv7, arm64) и macOS (amd64, arm64) выполните `make binaries`. PDF, Node.js и nFPM не нужны. Raspberry Pi с 32-битной ARMv7 ОС использует `linux_armv7`, с 64-битной ОС — `linux_arm64`. На macOS Intel используйте `darwin_amd64`, на Apple Silicon — `darwin_arm64`.
+Для бинарников Linux (amd64, 386, armv7, arm64) и macOS (amd64, arm64) выполните `make binaries`. Для упаковки нужны оба готовых PDF в docs/; Node.js и nFPM для команды binaries не нужны. Raspberry Pi с 32-битной ARMv7 ОС использует `linux_armv7`, с 64-битной ОС — `linux_arm64`. На macOS Intel используйте `darwin_amd64`, на Apple Silicon — `darwin_arm64`.
 
-Результат: `dist/releases/<version>/godhcp_<version>_<os>_<arch>`, архивы `.tar.gz` и `SHA256SUMS`. Каждый архив содержит бинарник `godhcp`, примеры конфигурации, README, каталог docs с инструкцией по веб-интерфейсу и скриншотами, LICENSE, NOTICE и уведомления сторонних компонентов. При распространении отдельных бинарников также приложите эти лицензионные файлы. Команда `make packages` отдельно собирает пакеты Linux amd64/arm64.
+Результат: `dist/releases/<version>/godhcp_<version>_<os>_<arch>`, архивы `.tar.gz` и `SHA256SUMS`. Каждый архив содержит кластерные/fencing-адаптеры в scripts/, шаблоны в deploy/, бинарник `godhcp`, примеры конфигурации, README, каталог docs с инструкцией по веб-интерфейсу и скриншотами, LICENSE, NOTICE и уведомления сторонних компонентов. При распространении отдельных бинарников также приложите эти лицензионные файлы. Команда `make packages` отдельно собирает пакеты Linux amd64/arm64.
 
 Оба PDF хранятся в `docs/` и включаются в бинарные архивы и пакеты из исходников тега; файл из неотслеживаемого `output/` для упаковки не используется. Сначала подготовьте PDF. Затем из корня репозитория:
 
@@ -108,3 +108,7 @@ PDF содержит оглавление, закладки и встроенн�
 ## Раздел обновления v0.1.8 в руководствах
 
 Единый источник процедуры - `docs/upgrade-v0.1.8.md`. Страницы `admin-guide.md` и `web-guide.md` ссылаются на него; генераторы PDF раскрывают маркер `<!-- include: upgrade-v0.1.8.md -->` в полный текст с шагами в оглавлении и закладках. После изменения процедуры пересоберите оба PDF и проверьте страницы. Для публикации скопируйте результаты из `output/pdf/` в `docs/godhcp-admin-guide.pdf` и `docs/godhcp-web-guide.pdf`.
+
+## Релиз 0.1.15: кластер и fencing
+
+Перед публикацией дополнительно выполните `make test-fencing`, `make test-fencing-windows` и `make test-cluster-docker`. Администраторский PDF включает полные тексты `docs/cluster-runtime.md` и `docs/fencing.md`. Кластер экспериментальный, работает только на Linux; готовые пакеты не включают его автоматически. Примеры устанавливаются в `/usr/share/doc/godhcp/examples/`, Linux hooks — в `/usr/libexec/godhcp/`. Для настройки сети дополнительно нужны iproute2/iproute и iputils; для SSH/IPMI — клиент OpenSSH/ipmitool.

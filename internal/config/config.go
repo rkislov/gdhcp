@@ -25,22 +25,23 @@ import (
 
 // Config is the on-disk YAML document.
 type Config struct {
-	Path         string         `yaml:"-" json:"-"`
-	Server       Server         `yaml:"server" json:"server"`
-	Database     Database       `yaml:"database" json:"database"`
-	API          API            `yaml:"api" json:"api"`
-	Web          Web            `yaml:"web" json:"web"`
-	VLANs        []VLAN         `yaml:"vlans,omitempty" json:"vlans,omitempty"`
-	Subnets      []Subnet       `yaml:"subnets,omitempty" json:"subnets,omitempty"`
-	Reservations []Reservation  `yaml:"reservations,omitempty" json:"reservations,omitempty"`
-	Relay        Relay          `yaml:"relay" json:"relay"`
-	Options      map[int]string `yaml:"options,omitempty" json:"options,omitempty"`
-	Classes      []Class        `yaml:"classes,omitempty" json:"classes,omitempty"`
-	Logging      Logging        `yaml:"logging" json:"logging"`
-	Metrics      Metrics        `yaml:"metrics" json:"metrics"`
-	DHCPv6       DHCPv6         `yaml:"dhcpv6" json:"dhcpv6"`
-	DDNS         DDNS           `yaml:"ddns" json:"ddns"`
-	HA           HA             `yaml:"ha" json:"ha"`
+	ClusterRevision uint64         `yaml:"cluster_revision,omitempty" json:"cluster_revision,omitempty"`
+	Path            string         `yaml:"-" json:"-"`
+	Server          Server         `yaml:"server" json:"server"`
+	Database        Database       `yaml:"database" json:"database"`
+	API             API            `yaml:"api" json:"api"`
+	Web             Web            `yaml:"web" json:"web"`
+	VLANs           []VLAN         `yaml:"vlans,omitempty" json:"vlans,omitempty"`
+	Subnets         []Subnet       `yaml:"subnets,omitempty" json:"subnets,omitempty"`
+	Reservations    []Reservation  `yaml:"reservations,omitempty" json:"reservations,omitempty"`
+	Relay           Relay          `yaml:"relay" json:"relay"`
+	Options         map[int]string `yaml:"options,omitempty" json:"options,omitempty"`
+	Classes         []Class        `yaml:"classes,omitempty" json:"classes,omitempty"`
+	Logging         Logging        `yaml:"logging" json:"logging"`
+	Metrics         Metrics        `yaml:"metrics" json:"metrics"`
+	DHCPv6          DHCPv6         `yaml:"dhcpv6" json:"dhcpv6"`
+	DDNS            DDNS           `yaml:"ddns" json:"ddns"`
+	HA              HA             `yaml:"ha" json:"ha"`
 }
 
 type Server struct {

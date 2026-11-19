@@ -1,0 +1,19 @@
+{
+  "local_node": "a",
+  "targets": {
+    "b": {
+      "provider": "ssh", "restart_disabled": false,
+      "host": "pve-b.example.net", "user": "godhcp-fence",
+      "key_file": "/etc/godhcp/fencing/id_ed25519",
+      "known_hosts": "/etc/godhcp/fencing/known_hosts"
+    },
+    "c": {
+      "provider": "redfish", "restart_disabled": false,
+      "url": "https://bmc-c.example.net", "username": "godhcp-fence",
+      "password_file": "/etc/godhcp/fencing/bmc-c.password",
+      "ca_file": "/etc/godhcp/fencing/bmc-ca.pem",
+      "system_uri": "/redfish/v1/Systems/1",
+      "uuid": "11111111-1111-1111-1111-111111111113", "serial": "REPLACE-ME"
+    }
+  }
+}

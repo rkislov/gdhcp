@@ -6,6 +6,7 @@
 import html
 import os
 import re
+import textwrap
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -92,7 +93,7 @@ def furniture(canvas, doc):
     canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / Руководство администратора")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
-    canvas.drawString(MARGIN, 23, "Редакция 10 ноября 2026 / Linux и systemd")
+    canvas.drawString(MARGIN, 23, "Редакция 19 ноября 2026 / Linux и systemd")
     canvas.drawRightString(PAGE_WIDTH - MARGIN, 23, str(doc.page))
     canvas.restoreState()
 
@@ -104,7 +105,7 @@ story = [
     Paragraph(f"Версия {VERSION} · Linux amd64 и arm64", body),
     Paragraph("© 2026 Кислов Роман Сергеевич. Apache License 2.0.", body),
     Spacer(1, 16),
-    Paragraph("Установка пакетов и запуск через systemd. Экспорт настроек ISC DHCP, импорт, проверка переноса, переключение и откат. Резервное копирование и диагностика.", body),
+    Paragraph("Установка пакетов и запуск через systemd. Экспорт настроек ISC DHCP, импорт, проверка переноса, переключение и откат. Резервное копирование, диагностика, автоматический кластер mTLS и fencing.", body),
     Spacer(1, 10),
     Paragraph("Перед переключением рабочей сети пройдите приёмку на изолированном стенде. Действующие аренды ISC автоматически не переносятся.", ParagraphStyle("CoverNote", parent=body, textColor=ACCENT)),
     Spacer(1, 18),
@@ -122,6 +123,11 @@ upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
 source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
                         upgrade.replace("\n## ", "\n### "))
 source += "\n\n## Samba DDNS: настройка и эксплуатация\n" + (ROOT / "docs/ddns-samba.md").read_text().split("\n", 1)[1].replace("\n## ", "\n### ")
+for filename, title in (("cluster-runtime.md", "Автоматический кластер: установка и эксплуатация"),
+                        ("fencing.md", "Готовые fencing-адаптеры и настройка инфраструктуры")):
+    appendix = (ROOT / "docs" / filename).read_text().split("\n", 1)[1]
+    appendix = re.sub(r"(?m)^#{2,4} ", "### ", appendix)
+    source += "\n\n## " + title + "\n" + appendix
 lines = source.splitlines()
 i = 1  # The title is rendered on the cover.
 heading_count = 0
@@ -142,7 +148,21 @@ while i < len(lines):
             block_style.fontSize = code.fontSize * (CONTENT_WIDTH - 30) / longest
             block_style.leading = max(block_style.fontSize * 1.4, 9)
         if block_style.fontSize < 6.3:
-            raise SystemExit(f"Code line too long for readable PDF near Markdown line {i}")
+            # Visual continuation marks keep long SSH/systemd lines legible.
+            # They are explicitly distinguished from executable line breaks.
+            block_style.fontSize = code.fontSize
+            block_style.leading = code.leading
+            columns = int((CONTENT_WIDTH - 30) / pdfmetrics.stringWidth("M", "GuideMono", code.fontSize))
+            wrapped = []
+            for raw_line in block:
+                wrapped.extend(textwrap.wrap(raw_line, width=columns, subsequent_indent="    ↪ ",
+                                             replace_whitespace=False, drop_whitespace=False,
+                                             break_on_hyphens=False) or [""])
+            block = wrapped
+            story.append(Paragraph("Знак ↪ обозначает продолжение той же строки. При копировании "
+                                   "уберите знак и соедините части без добавления пробелов; "
+                                   "готовые файлы есть в комплекте релиза.",
+                                   ParagraphStyle("CodeWrapNote", parent=body, fontSize=8, leading=11)))
         story.append(KeepTogether([Preformatted("\n".join(block), block_style)]))
         i += 1
         continue

@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+"""Manage a dedicated cluster service address. Requires CAP_NET_ADMIN/root."""
+import ipaddress
+import json
+import shutil
+import subprocess
+import sys
+import socket
+import struct
+import time
+
+
+def main():
+    if len(sys.argv) != 4 or sys.argv[1] not in ('up', 'down'):
+        raise SystemExit('usage: godhcp-cluster-ip up|down INTERFACE ADDRESS/PREFIX')
+    action, interface, text = sys.argv[1:]
+    address = ipaddress.ip_interface(text)
+    ip = shutil.which('ip')
+    if not ip:
+        raise SystemExit('iproute2 is required')
+    entries = json.loads(subprocess.check_output([ip, '-j', 'addr', 'show', 'dev', interface]))
+    existing = [a for link in entries for a in link['addr_info'] if a.get('local') == str(address.ip)]
+    if any(a['prefixlen'] != address.network.prefixlen for a in existing):
+        raise SystemExit('service address exists with a different prefix')
+    if action == 'down':
+        if existing:
+            subprocess.run([ip, 'addr', 'del', str(address), 'dev', interface], check=True)
+        return
+    if existing:
+        raise SystemExit('service address already present before activation')
+    if address.version == 6:
+        if address.ip.is_link_local or address.ip.is_multicast:
+            raise SystemExit('service IPv6 must be unicast and not link-local')
+        subprocess.run([ip, 'addr', 'add', str(address), 'dev', interface], check=True)
+        deadline = time.monotonic() + 10
+        while True:
+            links = json.loads(subprocess.check_output([ip, '-j', 'addr', 'show', 'dev', interface]))
+            states = [a for link in links for a in link['addr_info'] if a.get('local') == str(address.ip)]
+            if not states or any(a.get('dadfailed') or 'dadfailed' in a.get('flags', []) for a in states):
+                raise SystemExit('IPv6 DAD failed')
+            if not any(a.get('tentative') or 'tentative' in a.get('flags', []) for a in states):
+                break
+            if time.monotonic() >= deadline:
+                raise SystemExit('IPv6 DAD timeout')
+            time.sleep(0.1)
+        mac = bytes.fromhex(links[0]['address'].replace(':', ''))
+        if len(mac) != 6:
+            raise SystemExit('unsolicited NA requires an Ethernet interface')
+        index = socket.if_nametoindex(interface)
+        # Linux fills the ICMPv6 checksum for IPPROTO_ICMPV6 raw sockets.
+        message = struct.pack('!BBHI', 136, 0, 0, 0x20000000) + address.ip.packed + bytes([2, 1]) + mac
+        with socket.socket(socket.AF_INET6, socket.SOCK_RAW, socket.IPPROTO_ICMPV6) as sock:
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_IF, index)
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 255)
+            sock.bind((str(address.ip), 0, 0, index))
+            for _ in range(3):
+                sock.sendto(message, ('ff02::1', 0, 0, index))
+                time.sleep(0.1)
+        return
+    arping = shutil.which('arping')
+    if not arping:
+        raise SystemExit('iputils arping is required for service IPv4 activation')
+    subprocess.run([ip, 'addr', 'add', str(address), 'dev', interface], check=True)
+    subprocess.run([arping, '-U', '-c', '3', '-I', interface, str(address.ip)], check=True)
+
+
+if __name__ == '__main__':
+    main()

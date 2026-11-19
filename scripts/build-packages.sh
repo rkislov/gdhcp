@@ -6,14 +6,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 package_version=$(awk -F '"' '/Version = / {print $2}' internal/version/version.go)
 test -n "$package_version"
-test -f output/pdf/godhcp-admin-guide.pdf || {
-  echo 'Generate output/pdf/godhcp-admin-guide.pdf first (see docs/building.md).' >&2
+test -f docs/godhcp-admin-guide.pdf || {
+  echo 'Generate docs/godhcp-admin-guide.pdf first (see docs/building.md).' >&2
   exit 1
 }
 python3 scripts/check-licenses.py
 release_dir="dist/releases/$package_version"
 mkdir -p "$release_dir"
-cp output/pdf/godhcp-admin-guide.pdf "$release_dir/"
+cp docs/godhcp-admin-guide.pdf "$release_dir/"
 run_nfpm() {
   if test -n "${NFPM:-}"; then
     "$NFPM" "$@"
@@ -29,9 +29,12 @@ for package_arch in amd64 arm64; do
   cp deploy/systemd/godhcp.service "$stage_dir/"
   cp deploy/package/config.yml.example "$stage_dir/"
   cp -R docs "$stage_dir/"
-  cp output/pdf/godhcp-admin-guide.pdf "$stage_dir/"
+  cp docs/godhcp-admin-guide.pdf "$stage_dir/"
   cp LICENSE NOTICE THIRD_PARTY_LICENSES "$stage_dir/"
   cp -R third_party "$stage_dir/"
+  mkdir -p "$stage_dir/scripts" "$stage_dir/deploy"
+  cp scripts/godhcp-fence-peer scripts/godhcp-cluster-ip scripts/godhcp-fence-windows.ps1 scripts/GodhcpFencing.psm1 "$stage_dir/scripts/"
+  cp -R deploy/cluster deploy/fencing deploy/systemd deploy/logrotate "$stage_dir/deploy/"
   COPYFILE_DISABLE=1 tar -czf "$release_dir/godhcp_${package_version}_linux_${package_arch}.tar.gz" -C "$stage_dir" .
   python3 - "$package_arch" "$package_version" "$stage_dir" <<'PY'
 import pathlib, sys

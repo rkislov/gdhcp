@@ -88,6 +88,7 @@ func main() {
 	fs := flag.NewFlagSet("godhcp", flag.ExitOnError)
 	configPath := fs.String("config", env("GODHCP_CONFIG", "configs/dev.yml"), "path to config.yml")
 	controlPath := fs.String("control-socket", "", "private Unix socket for synchronous reload")
+	clusterPath := fs.String("cluster-config", "", "cluster manifest (experimental)")
 	validateOnly := fs.Bool("validate", false, "validate the configuration and exit")
 	_ = fs.Parse(os.Args[1:])
 
@@ -95,6 +96,22 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *clusterPath != "" {
+		manifest, err := loadClusterManifest(*clusterPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if *validateOnly {
+			fmt.Println("configuration and cluster manifest are valid")
+			return
+		}
+		if err := runCluster(cfg, *controlPath, manifest); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *validateOnly {
 		fmt.Println("configuration is valid")
@@ -108,20 +125,30 @@ func main() {
 }
 
 func runDaemon(cfg *config.Config, controlPath string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	return runService(ctx, cfg, controlPath, nil, nil)
+}
+func runService(parent context.Context, cfg *config.Config, controlPath string, supplied storage.Store, ready func()) error {
 	if cfg.DDNS.Enabled {
 		if err := ddns.CheckTools(cfg.DDNS); err != nil {
 			return err
 		}
 	}
 	logBuf := logbuf.New(1000)
-	logger := newLogger(cfg, logBuf)
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	logger, closeLog := managedLogger(cfg, logBuf)
+	defer closeLog()
+	ctx, stop := context.WithCancel(parent)
 	defer stop()
-	store, err := storage.Open(ctx, cfg.Database.Driver, cfg.Database.DSN)
-	if err != nil {
-		return fmt.Errorf("database: %w", err)
+	store := supplied
+	var err error
+	if store == nil {
+		store, err = storage.Open(ctx, cfg.Database.Driver, cfg.Database.DSN)
+		if err != nil {
+			return fmt.Errorf("database: %w", err)
+		}
+		defer store.Close()
 	}
-	defer store.Close()
 	met := metrics.New()
 	dnsWake := make(chan struct{}, 1)
 	svc, err := core.New(ctx, core.Options{Store: store, Config: cfg, Logger: logger, Metrics: met, OnBound: func(model.Lease) {
@@ -133,7 +160,10 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	if err != nil {
 		return fmt.Errorf("core: %w", err)
 	}
-	go svc.RunJanitor(ctx, 30*time.Second)
+	cfg = svc.Config()
+	janitorDone := make(chan struct{})
+	go func() { defer close(janitorDone); svc.RunJanitor(ctx, 30*time.Second) }()
+	defer func() { stop(); <-janitorDone }()
 	dnsWorker, err := ddns.New(store, svc.Config, logger)
 	if err != nil {
 		return err
@@ -183,10 +213,7 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	reload := func() error {
 		reloadMu.Lock()
 		defer reloadMu.Unlock()
-		next, err := config.Load(cfg.Path)
-		if err == nil {
-			err = svc.Apply(ctx, next)
-		}
+		err := svc.ReloadConfiguration(ctx)
 		if err != nil {
 			logger.Error("reload", "err", err)
 			return err
@@ -247,8 +274,13 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	go func() { defer close(dnsDone); dnsWorker.Run(dnsCtx, dnsWake) }()
 	defer func() { dnsCancel(); <-dnsDone }()
 	logger.Info("api listening", "addr", cfg.API.Listen)
-	if err := daemon.Notify("READY=1"); err != nil {
-		return fmt.Errorf("systemd ready: %w", err)
+	if ready != nil {
+		ready()
+	}
+	if supplied == nil {
+		if err := daemon.Notify("READY=1"); err != nil {
+			return fmt.Errorf("systemd ready: %w", err)
+		}
 	}
 	var failure error
 	select {
@@ -256,7 +288,9 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 	case failure = <-failures:
 		logger.Error("service failed", "err", failure)
 	}
-	_ = daemon.Notify("STOPPING=1")
+	if supplied == nil {
+		_ = daemon.Notify("STOPPING=1")
+	}
 	stop()
 	shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -269,6 +303,11 @@ func runDaemon(cfg *config.Config, controlPath string) error {
 }
 
 func newLogger(cfg *config.Config, buf *logbuf.Buffer) *slog.Logger {
+	logger, _ := managedLogger(cfg, buf)
+	return logger
+}
+func managedLogger(cfg *config.Config, buf *logbuf.Buffer) (*slog.Logger, func()) {
+	closeLog := func() {}
 	level := slog.LevelInfo
 	switch strings.ToLower(cfg.Logging.Level) {
 	case "debug":
@@ -283,6 +322,7 @@ func newLogger(cfg *config.Config, buf *logbuf.Buffer) *slog.Logger {
 		f, err := os.OpenFile(cfg.Logging.Output, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
 		if err == nil {
 			w = io.MultiWriter(os.Stdout, f)
+			closeLog = func() { _ = f.Close() }
 		}
 	}
 	opts := &slog.HandlerOptions{Level: level}
@@ -292,7 +332,7 @@ func newLogger(cfg *config.Config, buf *logbuf.Buffer) *slog.Logger {
 	} else {
 		base = slog.NewJSONHandler(w, opts)
 	}
-	return slog.New(logbuf.NewHandler(base, buf))
+	return slog.New(logbuf.NewHandler(base, buf)), closeLog
 }
 
 func env(key, def string) string {

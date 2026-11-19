@@ -18,6 +18,10 @@ payload=$(mktemp -d "$stage/payload.XXXXXX")
 mkdir -p "$payload/usr/bin" "$payload/usr/lib/systemd/system" "$payload/etc/logrotate.d" "$payload/etc/godhcp" "$payload/usr/share/doc/godhcp" "$result"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o "$payload/usr/bin/godhcp" ./cmd/godhcp
 go version -m "$payload/usr/bin/godhcp" > "$result/BUILDINFO.txt"
+mkdir -p "$payload/usr/libexec/godhcp" "$payload/usr/share/godhcp/fencing" "$payload/usr/share/doc/godhcp/examples"
+cp scripts/godhcp-fence-peer scripts/godhcp-cluster-ip "$payload/usr/libexec/godhcp/"
+cp scripts/godhcp-fence-windows.ps1 scripts/GodhcpFencing.psm1 "$payload/usr/share/godhcp/fencing/"
+cp -R deploy/cluster deploy/fencing "$payload/usr/share/doc/godhcp/examples/"
 cp deploy/systemd/godhcp.service "$payload/usr/lib/systemd/system/"
 cp deploy/logrotate/godhcp "$payload/etc/logrotate.d/godhcp"
 cp deploy/package/config.yml.example "$payload/etc/godhcp/"

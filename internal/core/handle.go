@@ -60,6 +60,21 @@ func (s *Service) Handle(ctx context.Context, in Input) (*Output, error) {
 }
 
 func (s *Service) handleLocked(ctx context.Context, in Input) (*Output, error) {
+	if s.configurationFault {
+		return nil, fmt.Errorf("cluster: configuration application incomplete; reload required")
+	}
+	// Replicated stores must prove current authority even for responses such as
+	// NAK and INFORM that do not persist a new binding.
+	if guard, ok := s.store.(interface{ CheckAuthority(context.Context) error }); ok {
+		if err := guard.CheckAuthority(ctx); err != nil {
+			return nil, err
+		}
+		// A newly elected leader must discard the previous pool occupancy index.
+		if err := s.restorePools(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	if in.Packet == nil || in.Packet.Op != dhcp.BootRequest {
 		return nil, nil
 	}

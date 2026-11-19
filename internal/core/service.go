@@ -39,20 +39,21 @@ type Prober interface {
 type Service struct {
 	// Serializes lease read/modify/write operations and pool reconciliation.
 	// mu only protects publication of the immutable configuration snapshot.
-	stateMu        sync.Mutex
-	needsReconcile bool
-	mu             sync.RWMutex
-	snap           *Snapshot
-	store          storage.Store
-	pools          *pool.Manager
-	log            *slog.Logger
-	metrics        *metrics.Metrics
-	prober         Prober
-	now            func() time.Time
-	statsMu        sync.Mutex
-	stats          map[string]*model.RelayStats
-	onBound        func(model.Lease)
-	gen            int64
+	stateMu            sync.Mutex
+	needsReconcile     bool
+	configurationFault bool
+	mu                 sync.RWMutex
+	snap               *Snapshot
+	store              storage.Store
+	pools              *pool.Manager
+	log                *slog.Logger
+	metrics            *metrics.Metrics
+	prober             Prober
+	now                func() time.Time
+	statsMu            sync.Mutex
+	stats              map[string]*model.RelayStats
+	onBound            func(model.Lease)
+	gen                int64
 }
 
 // Options configures a Service.
@@ -89,6 +90,13 @@ func New(ctx context.Context, opt Options) (*Service, error) {
 	}
 	opt.Metrics.SetSource(s)
 	if opt.Config != nil {
+		if backend, ok := s.store.(configurationBackend); ok {
+			resolved, err := backend.ResolveConfiguration(ctx, opt.Config)
+			if err != nil {
+				return nil, err
+			}
+			opt.Config = resolved
+		}
 		if err := s.Apply(ctx, opt.Config); err != nil {
 			return nil, err
 		}
@@ -115,6 +123,12 @@ func (s *Service) Apply(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
+	if backend, ok := s.store.(configurationBackend); ok {
+		s.configurationFault = true
+		if err := backend.PersistConfiguration(ctx, s.Config(), cfg); err != nil {
+			return err
+		}
+	}
 	vlans, subnets, relays, reservations := catalogParts(snap)
 	if err := s.store.ReplaceCatalog(ctx, storage.Catalog{
 		VLANs: vlans, Subnets: subnets, Relays: relays, Reservations: reservations,
@@ -128,6 +142,7 @@ func (s *Service) Apply(ctx context.Context, cfg *config.Config) error {
 	s.pools.Reconcile(snap.Pools, bindingsOf(leases))
 	s.mu.Lock()
 	s.snap = snap
+	s.configurationFault = false
 	s.mu.Unlock()
 	s.log.Info("configuration applied", "subnets", len(snap.Subnets), "vlans", len(cfg.VLANs))
 	return nil
@@ -257,4 +272,26 @@ func (s *Service) DeleteLease(ctx context.Context, ip string) error {
 	}
 	s.pools.Release(ip, l.MAC)
 	return nil
+}
+
+// configurationBackend is implemented by the cluster store only.
+type configurationBackend interface {
+	ResolveConfiguration(context.Context, *config.Config) (*config.Config, error)
+	PersistConfiguration(context.Context, *config.Config, *config.Config) error
+}
+
+func (s *Service) ClusterManaged() bool { _, ok := s.store.(configurationBackend); return ok }
+func (s *Service) ReloadConfiguration(ctx context.Context) error {
+	current := s.Config()
+	var next *config.Config
+	var err error
+	if backend, ok := s.store.(configurationBackend); ok {
+		next, err = backend.ResolveConfiguration(ctx, current)
+	} else {
+		next, err = config.Load(current.Path)
+	}
+	if err != nil {
+		return err
+	}
+	return s.Apply(ctx, next)
 }
