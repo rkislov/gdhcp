@@ -96,7 +96,7 @@ def furniture(canvas, doc):
     canvas.drawString(MARGIN, PAGE_HEIGHT - 26, f"GoDHCP {VERSION} / {GUIDE_TITLE}")
     canvas.setStrokeColor(colors.HexColor("#D7DDE3"))
     canvas.line(MARGIN, 35, PAGE_WIDTH - MARGIN, 35)
-    canvas.drawString(MARGIN, 23, "Редакция 19 ноября 2026 / Linux и systemd")
+    canvas.drawString(MARGIN, 23, "Редакция 21 ноября 2026 / Linux и systemd")
     canvas.drawRightString(PAGE_WIDTH - MARGIN, 23, str(doc.page))
     canvas.restoreState()
 
@@ -122,6 +122,9 @@ toc.levelStyles = [
 story += [toc, PageBreak()]
 source = (ROOT / ("docs/altlinux-p11.md" if ALT_P11 else "docs/admin-guide.md")).read_text()
 if not ALT_P11:
+    upgrade_v017 = (ROOT / "docs/upgrade-v0.1.17.md").read_text().split("\n", 1)[1]
+    source = source.replace("<!-- include: upgrade-v0.1.17.md -->",
+                            upgrade_v017.replace("\n## ", "\n### "))
     # Keep the upgrade procedure identical in Markdown and both PDF guides.
     upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
     source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
