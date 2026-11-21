@@ -8,6 +8,18 @@ GoDHCP — DHCPv4/v6-сервер на Go для управления адрес
 
 [Скачать релиз](https://github.com/rkislov/gdhcp/releases/latest) · [Руководство по веб-интерфейсу](docs/web-guide.md) · [PDF со скриншотами](docs/godhcp-web-guide.pdf) · [Руководство администратора](docs/admin-guide.md)
 
+## Скриншоты веб-интерфейса
+
+Примеры из демонстрационного стенда.
+
+### Обзор сервера и адресных пулов
+
+![Обзор GoDHCP с состоянием сервера и заполнением пулов](docs/images/web-guide/02-dashboard.png)
+
+### Аренды и поиск клиентов
+
+![Таблица аренд GoDHCP с поиском, фильтрами и экспортом CSV](docs/images/web-guide/03-leases.png)
+
 ## Возможности
 
 - **DHCPv4** — DISCOVER, OFFER, REQUEST, ACK, NAK, DECLINE, RELEASE и INFORM, динамические пулы, резервации по MAC/client-id, authoritative-режим, ping-check и PXE.

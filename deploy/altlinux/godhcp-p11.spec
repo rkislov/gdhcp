@@ -1,7 +1,7 @@
 # Copyright 2026 Kislov Roman Sergeevich; full notice below in %description.
 # SPDX-License-Identifier: Apache-2.0
 Name: godhcp
-%{!?godhcp_version:%define godhcp_version 0.1.16}
+%{!?godhcp_version:%define godhcp_version 0.1.17}
 Version: %{godhcp_version}
 Release: alt1.p11
 Summary: DHCPv4/v6 server with experimental cluster and fencing
