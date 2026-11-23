@@ -98,6 +98,9 @@ type Reservation struct {
 
 // LeaseFilter selects leases for list queries.
 type LeaseFilter struct {
+	Sort           string
+	Desc           bool
+	All            bool     // Return all matching, authorized leases for export.
 	AllowedSubnets []string // nil is unrestricted; empty denies all.
 	AllowedVLANs   []int    // nil is unrestricted; empty permits only untagged leases.
 	VLAN           *int

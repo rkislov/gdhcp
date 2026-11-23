@@ -5,7 +5,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -180,21 +179,8 @@ func (s *LeaseStore) ListLeases(ctx context.Context, f model.LeaseFilter) ([]mod
 		}
 		out = append(out, l)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].IP < out[j].IP })
-	total := len(out)
-	offset := max(0, f.Offset)
-	if offset >= total {
-		return []model.Lease{}, total, nil
-	}
-	out = out[offset:]
-	limit := f.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out, total, nil
+	page, total := model.LeasePage(out, f)
+	return page, total, nil
 }
 
 var _ storage.Store = (*LeaseStore)(nil)

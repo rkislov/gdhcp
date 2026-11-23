@@ -369,6 +369,19 @@ func (s *SQLStore) GetLease(ctx context.Context, ip string) (model.Lease, error)
 
 func (s *SQLStore) ListLeases(ctx context.Context, f model.LeaseFilter) ([]model.Lease, int, error) {
 	where, args := leaseWhere(f)
+	if f.Sort != "" || f.All {
+		rows, err := s.db.QueryContext(ctx, s.q(`SELECT ip, mac, client_id, hostname, subnet_id, vlan_id, giaddr, circuit_id, remote_id, link_select, state, expires_at, created_at FROM leases `+where), args...)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer rows.Close()
+		items, err := scanLeases(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		page, total := model.LeasePage(items, f)
+		return page, total, nil
+	}
 	var total int
 	if err := s.db.QueryRowContext(ctx, s.q(`SELECT COUNT(*) FROM leases `+where), args...).Scan(&total); err != nil {
 		return nil, 0, err

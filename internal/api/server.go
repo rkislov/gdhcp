@@ -207,6 +207,17 @@ func (s *Server) listLeases(w http.ResponseWriter, r *http.Request) {
 		Limit:    queryInt(r, "limit", 100),
 		Offset:   queryInt(r, "offset", 0),
 	}
+	f.Sort = r.URL.Query().Get("sort")
+	order := r.URL.Query().Get("order")
+	if !model.ValidLeaseSort(f.Sort) || (order != "" && order != "asc" && order != "desc") {
+		writeErr(w, http.StatusBadRequest, "bad_request", "invalid lease sort or order")
+		return
+	}
+	f.Desc = order == "desc"
+	f.All = r.URL.Query().Get("all") == "true"
+	if f.Desc && f.Sort == "" {
+		f.Sort = "ip"
+	}
 	if v := r.URL.Query().Get("vlan"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {

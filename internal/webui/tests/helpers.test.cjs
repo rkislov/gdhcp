@@ -18,6 +18,12 @@ test("CSV preserves commas, quotes and newlines and neutralizes formulas", () =>
   assert.ok(output.includes('"\'  +1"'));
   assert.ok(output.includes('"\'@SUM(A1)"'));
 });
+test("CSV exports every IPv4 octet and the complete IPv6 address as quoted fields", () => {
+  const addresses = ["10.0.116.37", "192.168.10.51", "0.0.0.0", "255.255.255.255", "2001:db8::100"];
+  const rows = addresses.map(ip => ({ip, mac: "00:58:3f:29:bd:75"}));
+  assert.equal(csv([["IP", "ip"], ["MAC", "mac"]], rows),
+    '\uFEFF"IP","MAC"\r\n' + addresses.map(ip => `"${ip}","00:58:3f:29:bd:75"`).join("\r\n"));
+});
 test("unknown states and roles have no elevated meaning", () => {
   assert.equal(state("bound").label, "Активна");
   assert.equal(state("constructor").tone, "neutral");
@@ -42,4 +48,23 @@ test("null list responses are safe to render without changing other API response
   const status = {role: "admin"};
   assert.equal(normalizeListResponse(status), status);
   assert.equal(normalizeListResponse(null), null);
+});
+
+test("CSV export loads every filtered page instead of the 200 displayed rows", async () => {
+  const {exportLeases} = require("../static/ui-helpers.js");
+  const items = Array.from({length: 201}, (_, i) => ({ip: `10.0.116.${i + 1}`}));
+  items.push({ip: "10.0.117.2"}, {ip: "10.0.118.2"});
+  const query = new URLSearchParams("limit=200&offset=200&sort=ip&order=desc&vlan=116&state=bound&q=10.0.");
+  const output = await exportLeases(async path => {
+    const params = new URL(path, "http://localhost").searchParams;
+    assert.equal(params.get("all"), "true");
+    assert.equal(params.has("offset"), false); assert.equal(params.has("limit"), false);
+    for (const key of ["sort", "order", "vlan", "state", "q"]) assert.equal(params.get(key), query.get(key));
+    return {items, total: items.length};
+  }, query);
+  assert.equal(output.split("\r\n").length, 204);
+  assert.ok(output.includes('"10.0.117.2"')); assert.ok(output.includes('"10.0.118.2"'));
+  assert.equal(query.get("offset"), "200");
+  await assert.rejects(exportLeases(async () => ({items: items.slice(0,200), total:203}),query), /неполный/);
+  await assert.rejects(exportLeases(async () => {throw new Error("Access denied");},query), /Access denied/);
 });

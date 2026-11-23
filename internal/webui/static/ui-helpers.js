@@ -8,6 +8,15 @@
     return '"' + text.replace(/"/g, '""') + '"';
   }
   const csv = (columns, rows) => "\uFEFF" + [columns.map(([title]) => csvCell(title)).join(","), ...rows.map(row => columns.map(([, key]) => csvCell(row[key])).join(","))].join("\r\n");
+  async function exportLeases(api, query) {
+    const params = new URLSearchParams(query);
+    params.delete("offset"); params.delete("limit"); params.set("all", "true");
+    const data = await api("/leases?" + params);
+    if (!Array.isArray(data.items) || data.items.length !== data.total) {
+      throw new Error("Сервер вернул неполный список аренд. CSV не сохранён.");
+    }
+    return csv([["IP", "ip"], ["MAC", "mac"], ["Имя", "hostname"], ["VLAN", "vlan_id"], ["Подсеть", "subnet_id"], ["Relay", "giaddr"], ["Состояние", "state"], ["Истекает", "expires_at"]], data.items);
+  }
   const states = {bound: {label: "Активна", tone: "success"}, offered: {label: "Предложена", tone: "info"}, declined: {label: "Конфликт IP", tone: "danger"}, released: {label: "Освобождена", tone: "neutral"}, expired: {label: "Истекла", tone: "neutral"}};
   const state = value => Object.hasOwn(states, value) ? states[value] : {label: String(value || "Неизвестно"), tone: "neutral"};
   const ranks = {admin: 3, operator: 2, viewer: 1};
@@ -24,7 +33,7 @@
     }
     return value;
   }
-  const helpers = {escapeHTML, csvCell, csv, state, rank, uptime, normalizeListResponse};
+  const helpers = {exportLeases, escapeHTML, csvCell, csv, state, rank, uptime, normalizeListResponse};
   if (typeof module !== "undefined" && module.exports) module.exports = helpers;
   if (root) {
     root.GoDHCPUI = helpers;

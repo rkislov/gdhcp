@@ -47,7 +47,23 @@ paths:
   /api/v1/status:
     get: {summary: Server status, security: [{bearerAuth: []}], responses: {"200": {description: Status}}}
   /api/v1/leases:
-    get: {summary: List leases, security: [{bearerAuth: []}], responses: {"200": {description: Lease page}}}
+    get:
+      summary: List leases
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: sort, in: query, schema: {type: string, enum: [ip, hostname, mac, vlan_id, subnet_id, giaddr, state, expires_at]}, description: Sort before pagination; IP and relay addresses are compared numerically.}
+        - {name: order, in: query, schema: {type: string, enum: [asc, desc], default: asc}}
+        - {name: all, in: query, schema: {type: boolean, default: false}, description: Return all matching authorized leases for export; ignores limit and offset.}
+        - {name: limit, in: query, schema: {type: integer, default: 100, maximum: 1000}}
+        - {name: offset, in: query, schema: {type: integer, default: 0, minimum: 0}}
+        - {name: q, in: query, schema: {type: string}}
+        - {name: vlan, in: query, schema: {type: integer}}
+        - {name: state, in: query, schema: {type: string}}
+        - {name: subnet, in: query, schema: {type: string}}
+        - {name: giaddr, in: query, schema: {type: string}}
+      responses:
+        "200": {description: Lease list and total count}
+        "400": {description: Invalid sorting or filter parameters}
   /api/v1/leases/{ip}:
     get: {summary: Get lease, security: [{bearerAuth: []}], parameters: [{name: ip, in: path, required: true, schema: {type: string}}], responses: {"200": {description: Lease}}}
     delete: {summary: Delete lease, security: [{bearerAuth: []}], parameters: [{name: ip, in: path, required: true, schema: {type: string}}], responses: {"204": {description: Deleted}}}

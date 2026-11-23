@@ -1,7 +1,7 @@
 /* Copyright 2026 Кислов Роман Сергеевич. Apache-2.0. */
 (function () {
   "use strict";
-  const {escapeHTML: esc, csv, state, rank, uptime, normalizeListResponse} = window.GoDHCPUI;
+  const {escapeHTML: esc, exportLeases, state, rank, uptime, normalizeListResponse} = window.GoDHCPUI;
   const $ = (selector, root = document) => root.querySelector(selector);
   const prefix = document.body.dataset.uiPrefix || "/ui";
   const page = document.body.dataset.page;
@@ -149,12 +149,22 @@
     };
   }
   function leasesPage() {
-    let offset = 0, rows = [], limit = 50, total = 0;
+    let offset = 0, rows = [], limit = 50, total = 0, sort = "ip", order = "asc", loadedQuery = null, loadSequence = 0;
     const load = async () => {
+      const sequence = ++loadSequence;
       const values = new FormData($("#filter")); limit = Number(values.get("limit")) || 50;
-      const query = new URLSearchParams({limit, offset});
+      const query = new URLSearchParams({limit, offset, sort, order});
       for (const k of ["q", "vlan", "state"]) if (values.get(k)) query.set(k, values.get(k));
-      const data = await api("/leases?" + query); rows = data.items; total = data.total;
+      const data = await api("/leases?" + query);
+      if (sequence !== loadSequence) return;
+      rows = data.items; total = data.total; loadedQuery = new URLSearchParams(query);
+      document.querySelectorAll("[data-lease-sort]").forEach(button => {
+        const active = button.dataset.leaseSort === sort;
+        button.querySelector("span").textContent = active ? (order === "asc" ? " ↑" : " ↓") : " ↕";
+        button.closest("th").removeAttribute("aria-sort");
+      });
+      const activeSort = document.querySelector(`[data-lease-sort="${sort}"]`);
+      activeSort.closest("th").setAttribute("aria-sort", order === "asc" ? "ascending" : "descending");
       if (offset >= total && offset > 0) { offset = Math.max(0, Math.floor(Math.max(0, total - 1) / limit) * limit); return load(); }
       tableRows("rows", rows.map(l => `<tr><td class="mono font-medium">${esc(l.ip)}</td><td><div class="text-xs">${esc(l.hostname || "Без имени")}</div><div class="mono mt-1 text-slate-400">${esc(l.mac)}</div></td><td>${l.vlan_id ? `<span class="badge">${esc(l.vlan_id)}</span>` : "—"}</td><td class="text-xs text-slate-500">${esc(l.subnet_id)}</td><td class="mono text-slate-500">${esc(l.giaddr || "—")}</td><td>${badge(l.state)}</td><td class="whitespace-nowrap text-xs text-slate-500">${esc(date(l.expires_at))}</td><td>${l.can_operate ? deleteButton(l.ip, l.ip, "operator") : "—"}</td></tr>`).join(""), 8, "Аренды не найдены", "Попробуйте изменить фильтры или дождитесь DHCP-запросов.");
       count(total); $("#page-range").textContent = total ? `${offset + 1}–${offset + rows.length} из ${total}` : "Нет записей";
@@ -163,7 +173,16 @@
     form("filter", async () => { offset = 0; await load(); });
     $("#prev-page").onclick = () => busy($("#refresh-btn"), async () => { offset = Math.max(0, offset - limit); await load(); });
     $("#next-page").onclick = () => busy($("#refresh-btn"), async () => { offset += limit; await load(); });
-    $("#csv").onclick = () => download(csv([["IP", "ip"], ["MAC", "mac"], ["Имя", "hostname"], ["VLAN", "vlan_id"], ["Подсеть", "subnet_id"], ["Состояние", "state"], ["Истекает", "expires_at"]], rows), "godhcp-leases.csv", "text/csv;charset=utf-8");
+    document.querySelectorAll("[data-lease-sort]").forEach(button => {
+      button.onclick = () => busy(button, async () => {
+        order = sort === button.dataset.leaseSort && order === "asc" ? "desc" : "asc";
+        sort = button.dataset.leaseSort; offset = 0; await load();
+      });
+    });
+    $("#csv").onclick = () => busy($("#csv"), async () => {
+      if (!loadedQuery) throw new Error("Дождитесь загрузки списка аренд.");
+      download(await exportLeases(api, loadedQuery), "godhcp-leases.csv", "text/csv;charset=utf-8");
+    });
     bindDelete("rows", "/leases", "Адрес будет освобождён на сервере. Устройство может использовать его до конца аренды. Убедитесь, что удаление безопасно."); return load;
   }
   function subnetsPage() {

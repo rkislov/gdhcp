@@ -118,9 +118,10 @@ toc.levelStyles = [
 story += [toc, PageBreak()]
 source = (ROOT / "docs/web-guide.md").read_text()
 # Keep the upgrade procedure identical in Markdown and both PDF guides.
-upgrade = (ROOT / "docs/upgrade-v0.1.9.md").read_text().split("\n", 1)[1]
-source = source.replace("<!-- include: upgrade-v0.1.9.md -->",
-                        upgrade.replace("\n## ", "\n### "))
+def include_upgrade(match):
+    upgrade = (ROOT / "docs" / match.group(1)).read_text().split("\n", 1)[1]
+    return upgrade.replace("\n## ", "\n### ")
+source = re.sub(r"<!-- include: (upgrade-v[0-9.]+\.md) -->", include_upgrade, source)
 lines = source.splitlines()
 i = 1  # The title is rendered on the cover.
 heading_count = 0
