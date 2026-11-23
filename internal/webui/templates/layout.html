@@ -2,8 +2,8 @@
 {{define "head"}}
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>{{.Title}} · GoDHCP</title>
-<link rel="stylesheet" href="{{.Prefix}}/static/style.css">
-<script src="{{.Prefix}}/static/ui-helpers.js"></script>
+<link rel="stylesheet" href="{{.Prefix}}/static/style.css?v={{.Version}}">
+<script src="{{.Prefix}}/static/ui-helpers.js?v={{.Version}}"></script>
 {{end}}
 {{define "nav"}}
 <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:p-3">К содержимому</a>
@@ -42,5 +42,5 @@
 {{define "foot"}}
 <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-description"><h2 id="confirm-title"></h2><p id="confirm-description" class="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400"></p><div class="mt-6 flex justify-end gap-2"><button type="button" class="btn" id="confirm-cancel">Отмена</button><button type="button" class="btn btn-danger" id="confirm-ok">Подтвердить</button></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
-<script src="{{.Prefix}}/static/app.js" defer></script>
+<script src="{{.Prefix}}/static/app.js?v={{.Version}}" defer></script>
 {{end}}

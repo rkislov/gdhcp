@@ -20,6 +20,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kislovrs/godhcp/internal/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,10 +55,27 @@ func TestAllPagesAndCustomPrefix(t *testing.T) {
 				Handler(prefix).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, prefix+"/"+page, nil))
 				require.Equal(t, http.StatusOK, rec.Code)
 				require.Contains(t, rec.Body.String(), `data-ui-prefix="`+prefix+`"`)
-				require.Contains(t, rec.Body.String(), `src="`+prefix+`/static/ui-helpers.js"`)
+				require.Contains(t, rec.Body.String(), `src="`+prefix+`/static/ui-helpers.js?v=`+version.Version+`"`)
 				require.NotContains(t, rec.Body.String(), "GODHCP_UI_PREFIX=")
 				require.NotContains(t, rec.Body.String(), "ZgotmplZ")
 			})
+		}
+	}
+}
+
+func TestUpgradeLoadsVersionedAssetsAndRevalidatesCache(t *testing.T) {
+	for _, prefix := range []string{"/ui", "/network"} {
+		h := Handler(prefix)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, prefix+"/leases", nil))
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		for _, asset := range []string{"style.css", "ui-helpers.js", "app.js"} {
+			url := prefix + "/static/" + asset + "?v=" + version.Version
+			require.Contains(t, rec.Body.String(), url)
+			res := httptest.NewRecorder()
+			h.ServeHTTP(res, httptest.NewRequest(http.MethodGet, url, nil))
+			require.Equal(t, http.StatusOK, res.Code)
+			require.Equal(t, "no-cache", res.Header().Get("Cache-Control"))
 		}
 	}
 }

@@ -57,6 +57,7 @@ func Handler(prefix string) http.Handler {
 			return
 		}
 		if strings.HasPrefix(path, "/static/") {
+			w.Header().Set("Cache-Control", "no-cache")
 			files.ServeHTTP(w, r)
 			return
 		}
@@ -65,6 +66,7 @@ func Handler(prefix string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := pages.ExecuteTemplate(w, name, Page{
 			Title:       title,
