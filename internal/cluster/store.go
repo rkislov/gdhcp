@@ -29,6 +29,9 @@ func (s *LeaseStore) CheckAuthority(ctx context.Context) error {
 	return s.Node.CheckAuthority(ctx)
 }
 func (n *Node) CheckAuthority(ctx context.Context) error {
+	if n.pair != nil {
+		return n.pair.authority(ctx)
+	}
 	done := make(chan error, 1)
 	go func() {
 		if e := n.Raft.VerifyLeader().Error(); e != nil {

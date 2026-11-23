@@ -63,6 +63,9 @@ func TestPeerMutualTLS(t *testing.T) {
 	t.Run("lease failover", func(t *testing.T) {
 		testLeaseFailover(t, []*tls.Config{a, b, makeConfig("c", members[2], false)}, members)
 	})
+	t.Run("pair faults", func(t *testing.T) { testPairFaults(t, []*tls.Config{a, b}, members[:2]) })
+	t.Run("pair qualification", func(t *testing.T) { qualifyPair(t, []*tls.Config{a, b}, members[:2]) })
+	t.Run("active backup", func(t *testing.T) { testPair(t, []*tls.Config{a, b, makeConfig("c", members[2], false)}, members) })
 	rogue := makeConfig("rogue", Identity("other", "c"), false)
 	expired := makeConfig("expired", members[0], true)
 	exchange := func(client *tls.Config) (error, error) {

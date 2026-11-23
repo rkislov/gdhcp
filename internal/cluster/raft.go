@@ -4,6 +4,7 @@ package cluster
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -21,8 +22,10 @@ import (
 // Peer binds an advertised transport endpoint to an authenticated identity.
 type Peer struct{ ID, Address, Hostname, Identity string }
 
-// Node owns the durable consensus log. It does not activate DHCP or a VIP.
+// Node owns either a Raft log or a fenced two-member replication backend.
+// Opening it does not activate DHCP or a VIP.
 type Node struct {
+	pair      *Pair
 	id        string
 	Raft      *raft.Raft
 	transport *raft.NetworkTransport
@@ -60,6 +63,9 @@ func Open(id, dir string, listener net.Listener, security *tls.Config, peers []P
 	}
 	if !found {
 		return nil, fmt.Errorf("cluster: unknown local member")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "pair.db")); !os.IsNotExist(err) {
+		return nil, fmt.Errorf("cluster: directory contains active-backup state or cannot be inspected")
 	}
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
@@ -133,14 +139,29 @@ func Open(id, dir string, listener net.Listener, security *tls.Config, peers []P
 }
 
 func (n *Node) Close() {
-	n.once.Do(func() { n.Raft.Shutdown().Error(); n.transport.Close(); n.disk.Close() })
+	n.once.Do(func() {
+		if n.pair != nil {
+			n.pair.close()
+			return
+		}
+		n.Raft.Shutdown().Error()
+		n.transport.Close()
+		n.disk.Close()
+	})
 }
 
-// Commit only returns success after majority persistence and local application.
+// Commit returns success after durable replication and local application:
+// majority persistence for Raft, or peer persistence/confirmed fencing for Pair.
 // A timeout has an unknown outcome and must never authorize a DHCP response.
 func (n *Node) Commit(data []byte, timeout time.Duration) error {
 	if len(data) == 0 || len(data) > 1024*1024 || timeout <= 0 {
 		return fmt.Errorf("cluster: invalid command")
+	}
+	if n.pair != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		_, err := n.pair.commit(ctx, data)
+		return err
 	}
 	f := n.Raft.Apply(append([]byte(nil), data...), timeout)
 	done := make(chan error, 1)

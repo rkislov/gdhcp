@@ -88,7 +88,7 @@ func main() {
 	fs := flag.NewFlagSet("godhcp", flag.ExitOnError)
 	configPath := fs.String("config", env("GODHCP_CONFIG", "configs/dev.yml"), "path to config.yml")
 	controlPath := fs.String("control-socket", "", "private Unix socket for synchronous reload")
-	clusterPath := fs.String("cluster-config", "", "cluster manifest (experimental)")
+	clusterPath := fs.String("cluster-config", "", "cluster manifest (raft or active-backup)")
 	validateOnly := fs.Bool("validate", false, "validate the configuration and exit")
 	_ = fs.Parse(os.Args[1:])
 

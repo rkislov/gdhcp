@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -27,18 +28,21 @@ import (
 )
 
 type clusterManifest struct {
-	ID        string        `yaml:"id"`
-	Node      string        `yaml:"node"`
-	Listen    string        `yaml:"listen"`
-	DataDir   string        `yaml:"data_dir"`
-	Bootstrap bool          `yaml:"bootstrap"`
-	CA        string        `yaml:"ca"`
-	Cert      string        `yaml:"cert"`
-	Key       string        `yaml:"key"`
-	Peers     []clusterPeer `yaml:"peers"`
-	Fence     []string      `yaml:"fence"`
-	IPUp      []string      `yaml:"ip_up"`
-	IPDown    []string      `yaml:"ip_down"`
+	Mode            string        `yaml:"mode"`
+	Primary         string        `yaml:"primary"`
+	FailoverTimeout time.Duration `yaml:"failover_timeout"`
+	ID              string        `yaml:"id"`
+	Node            string        `yaml:"node"`
+	Listen          string        `yaml:"listen"`
+	DataDir         string        `yaml:"data_dir"`
+	Bootstrap       bool          `yaml:"bootstrap"`
+	CA              string        `yaml:"ca"`
+	Cert            string        `yaml:"cert"`
+	Key             string        `yaml:"key"`
+	Peers           []clusterPeer `yaml:"peers"`
+	Fence           []string      `yaml:"fence"`
+	IPUp            []string      `yaml:"ip_up"`
+	IPDown          []string      `yaml:"ip_down"`
 }
 type clusterPeer struct {
 	ID       string `yaml:"id"`
@@ -61,8 +65,31 @@ func loadClusterManifest(path string) (clusterManifest, error) {
 	if e = d.Decode(new(any)); e != io.EOF {
 		return m, fmt.Errorf("cluster: exactly one YAML document required")
 	}
-	if m.ID == "" || m.Node == "" || m.Listen == "" || !filepath.IsAbs(m.DataDir) || len(m.Peers) != 3 {
-		return m, fmt.Errorf("cluster: id, node, listen, absolute data_dir and three peers required")
+	if m.Mode == "" {
+		m.Mode = "raft"
+	}
+	expected := 3
+	switch m.Mode {
+	case "raft":
+		if m.Primary != "" || m.FailoverTimeout != 0 {
+			return m, fmt.Errorf("cluster: primary/failover_timeout require active-backup")
+		}
+	case "active-backup":
+		expected = 2
+		if m.Bootstrap {
+			return m, fmt.Errorf("active-backup: bootstrap must be false; use primary")
+		}
+		if m.FailoverTimeout == 0 {
+			m.FailoverTimeout = 30 * time.Second
+		}
+		if m.Primary == "" || m.FailoverTimeout < 30*time.Second || m.FailoverTimeout > 5*time.Minute {
+			return m, fmt.Errorf("active-backup: primary and failover_timeout 30s..5m required")
+		}
+	default:
+		return m, fmt.Errorf("cluster: unknown mode %q", m.Mode)
+	}
+	if m.ID == "" || m.Node == "" || m.Listen == "" || !filepath.IsAbs(m.DataDir) || len(m.Peers) != expected {
+		return m, fmt.Errorf("cluster: id, node, listen, absolute data_dir and %d peers required", expected)
 	}
 	for _, p := range []string{m.CA, m.Cert, m.Key} {
 		if !filepath.IsAbs(p) {
@@ -94,6 +121,9 @@ func loadClusterManifest(path string) (clusterManifest, error) {
 				return m, fmt.Errorf("cluster: local peer address must equal listen")
 			}
 		}
+	}
+	if m.Mode == "active-backup" && !seen[m.Primary] {
+		return m, fmt.Errorf("active-backup: primary must be a peer")
 	}
 	if !local {
 		return m, fmt.Errorf("cluster: local member missing")
@@ -127,6 +157,9 @@ func runCluster(base *config.Config, control string, m clusterManifest) error {
 		return e
 	}
 	defer listener.Close()
+	if m.Mode == "active-backup" {
+		return runPair(ctx, base, control, m, listener, security, peers)
+	}
 	state := cluster.NewLeaseState()
 	node, e := cluster.Open(m.Node, m.DataDir, listener, security, peers, m.Bootstrap, state)
 	if e != nil {
@@ -286,5 +319,72 @@ func (h *workloadHooks) Start(ctx context.Context) error {
 		return fmt.Errorf("cluster workload exited before ready")
 	case <-ready:
 		return nil
+	}
+}
+
+// runPair shares the existing DHCP/API/DDNS adapters, but not Raft election or
+// activation. HTTP replication is only made available after stale VIP cleanup.
+func runPair(ctx context.Context, base *config.Config, control string, m clusterManifest, listener net.Listener, security *tls.Config, peers []cluster.Peer) (result error) {
+	state := cluster.NewLeaseState()
+	hooks := &workloadHooks{base: base, control: control, manifest: m, state: state, parent: ctx}
+	if err := hooks.ReleaseIP(ctx); err != nil {
+		return err
+	}
+	node, err := cluster.OpenPair(m.Node, m.Primary, m.DataDir, listener, security, peers, state, m.FailoverTimeout, hooks.Fence)
+	if err != nil {
+		return err
+	}
+	defer node.Close()
+	hooks.node = node
+	defer func() {
+		clean, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		cleanupErr := hooks.Stop(clean)
+		if cleanupErr == nil {
+			cleanupErr = hooks.ReleaseIP(clean)
+		}
+		if cleanupErr != nil {
+			slog.Error("active-backup cleanup failed", "err", cleanupErr)
+			result = errors.Join(result, cleanupErr)
+		}
+	}()
+	if err = daemon.Notify("READY=1"); err != nil {
+		return err
+	}
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+	started := false
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+		}
+		step, cancel := context.WithTimeout(ctx, 25*time.Second)
+		active, e := node.PairStep(step)
+		cancel()
+		if e != nil {
+			return e
+		}
+		if active && !started {
+			start, cancel := context.WithTimeout(ctx, 30*time.Second)
+			e = hooks.AcquireIP(start)
+			if e == nil {
+				e = hooks.Start(start)
+			}
+			cancel()
+			if e != nil {
+				return e
+			}
+			started = true
+			slog.Info("active-backup active", "node", m.Node)
+		}
+		if started {
+			select {
+			case <-hooks.exited:
+				return fmt.Errorf("active-backup: workload exited")
+			default:
+			}
+		}
 	}
 }

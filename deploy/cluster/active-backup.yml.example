@@ -1,0 +1,23 @@
+# Copyright 2026 Кислов Роман Сергеевич
+# SPDX-License-Identifier: Apache-2.0
+# Two-member fenced replication. Separate from the three-voter Raft mode.
+mode: active-backup
+id: office-pair
+node: a
+primary: a
+listen: 192.0.2.11:8444
+data_dir: /var/lib/godhcp/active-backup
+failover_timeout: 30s
+ca: /etc/godhcp/cluster-tls/ca.pem
+cert: /etc/godhcp/cluster-tls/a.pem
+key: /etc/godhcp/cluster-tls/a.key
+peers:
+  - id: a
+    address: 192.0.2.11:8444
+    hostname: dhcp-a.example.net
+  - id: b
+    address: 192.0.2.12:8444
+    hostname: dhcp-b.example.net
+fence: [/usr/libexec/godhcp/godhcp-fence-peer, --config, /etc/godhcp/fencing.json]
+ip_up: [/usr/libexec/godhcp/godhcp-cluster-ip, up, ens192, 192.0.2.10/24]
+ip_down: [/usr/libexec/godhcp/godhcp-cluster-ip, down, ens192, 192.0.2.10/24]

@@ -110,6 +110,9 @@ func (n *Node) commitResult(ctx context.Context, command LeaseCommand) (interfac
 	if len(b) > 1024*1024 {
 		return nil, fmt.Errorf("cluster: command too large")
 	}
+	if n.pair != nil {
+		return n.pair.commit(ctx, b)
+	}
 	f := n.Raft.Apply(b, 3*time.Second)
 	done := make(chan struct{})
 	go func() { f.Error(); close(done) }()

@@ -22,6 +22,9 @@ case "$(docker info --format '{{.Architecture}}')" in aarch64|arm64) arch=arm64;
 CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -o "$work/godhcp" ./cmd/godhcp
 mkdir "$work/tests"
 cp -R tests/integration "$work/tests/"
+if [ "${GODHCP_CLUSTER_MODE:-raft}" = active-backup ]; then
+ cp tests/active-backup/ddns_lab.py "$work/tests/integration/cluster_lab.py"
+fi
 cp scripts/godhcp-cluster-ip "$work/tests/integration/cluster_ip.py"
 samba=${GODHCP_CLUSTER_SAMBA:-1}
 if [ "$samba" = 1 ]; then

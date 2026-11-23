@@ -89,7 +89,7 @@ def worker(a):
             assert opts['router'] == a['gateway']
             if 'dns' in a:
                 assert opts['name_server'] == a['dns'], f'DNS mismatch: {opts}'
-            assert opts['lease_time'] == 120 and opts['renewal_time'] == a.get('renewal_time', 5)
+            assert opts['lease_time'] == a.get('lease_time', 120) and opts['renewal_time'] == a.get('renewal_time', 5)
             print(json.dumps({'ip': addr, 'server': server, 'mac': mac}))
         elif mode == 'renew':
             reply, opts = exchange('request', ciaddr=a['ip'], expect=5)
